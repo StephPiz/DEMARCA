@@ -5,10 +5,454 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StoreStatus { active inactive }
+enum ProductType { standard vintage refurbished }
+enum ProductStatus { active inactive archived }
+enum ChannelType { shopify idealo marketplace manual other }
+enum ChannelStatus { active inactive }
+enum WarehouseType { own external returns }
+enum WarehouseStatus { active inactive }
+enum LotSourceType { manual_init manual_receipt }
+enum LotStatus { available held non_sellable repair }
+enum MovementType { lot_create manual_adjust sale_out return_in transfer_out transfer_in }
+enum EanAliasSource { manual marketplace worten idealo shopify other }
+
+model HoldingCompany {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stores    Store[]
+  audit     AuditEvent[]
+
+  @@unique([name])
+  @@map("holding_companies")
+}
+
+model Store {
+  id        String      @id @default(cuid())
+  holdingId String
+  code      String
+  name      String
+  status    StoreStatus @default(active)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  holding   HoldingCompany @relation(fields: [holdingId], references: [id], onDelete: Restrict)
+
+  memberships UserStoreMembership[]
+  products    Product[]
+  channels    SalesChannel[]
+  warehouses  Warehouse[]
+  currencies  Currency[]
+  fxRates     FxRate[]
+  audit       AuditEvent[]
+
+  @@unique([holdingId, code])
+  @@index([holdingId])
+  @@map("stores")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  fullName        String
+  preferredLocale String   @default("es")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  memberships   UserStoreMembership[]
+  permissions   UserPermission[]
+  refreshTokens RefreshToken[]
+  audit         AuditEvent[]
+
+  @@map("users")
+}
+
+model UserStoreMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  storeId   String
+  roleKey   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+  @@index([storeId, roleKey])
+  @@map("user_store_memberships")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  description String?
+
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model UserPermission {
+  id           String   @id @default(cuid())
+  userId       String
+  storeId      String
+  permissionId String
+  granted      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store      Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId, permissionId])
+  @@index([storeId, userId])
+  @@map("user_permissions")
+}
+
+model Product {
+  id          String        @id @default(cuid())
+  storeId     String
+  sku         String?
+  ean         String
+  brand       String
+  model       String
+  type        ProductType   @default(standard)
+  status      ProductStatus @default(active)
+
+  costAmountOriginal Decimal? @db.Decimal(18, 6)
+  costCurrencyCode   String?
+  costFxRate         Decimal? @db.Decimal(18, 8)
+  costAmountBaseEur  Decimal? @db.Decimal(18, 6)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  store       Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  images       ProductImage[]
+  eanAliases   EanAlias[]
+  translations ProductTranslation[]
+  channelPrices ProductChannelPrice[]
+  channelLinks  ChannelProductLink[]
+  channelTexts  ChannelProductText[]
+  lots         InventoryLot[]
+  movements    InventoryMovement[]
+
+  @@unique([storeId, ean])
+  @@index([storeId, brand, model])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  isPrimary Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, isPrimary])
+  @@map("product_images")
+}
+
+model EanAlias {
+  id         String        @id @default(cuid())
+  storeId    String
+  productId  String
+  eanVariant String
+  source     EanAliasSource @default(manual)
+  createdAt  DateTime      @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, eanVariant])
+  @@index([productId])
+  @@map("ean_aliases")
+} 
+
+model SalesChannel {
+  id        String        @id @default(cuid())
+  storeId   String
+  code      String
+  name      String
+  type      ChannelType
+  status    ChannelStatus @default(active)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  store  Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  prices ProductChannelPrice[]
+  links  ChannelProductLink[]
+  texts  ChannelProductText[]
+
+  @@unique([storeId, code])
+  @@index([storeId, type, status])
+  @@map("sales_channels")
+}
+
+model ProductChannelPrice {
+  id        String   @id @default(cuid())
+  storeId   String
+  productId String
+  channelId String
+
+  priceAmount  Decimal @db.Decimal(18, 6)
+  currencyCode String
+  listingUrl   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store   Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channel SalesChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId, channelId])
+  @@index([channelId])
+  @@map("product_channel_prices")
+}
+
+model ChannelProductLink {
+  id        String   @id @default(cuid())
+  storeId   String
+  productId String
+  channelId String
+
+  channelProductName String?
+  channelEan         String?
+  origin             String?
+  listingUrl         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store   Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channel SalesChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId, channelId])
+  @@index([channelId])
+  @@map("channel_product_links")
+}
+
+model ProductTranslation {
+  id          String   @id @default(cuid())
+  storeId     String
+  productId   String
+  locale      String
+  title       String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId, locale])
+  @@index([productId, locale])
+  @@map("product_translations")
+}
+
+model ChannelProductText {
+  id          String   @id @default(cuid())
+  storeId     String
+  channelId   String
+  productId   String
+  locale      String
+  title       String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store   Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  channel SalesChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, channelId, productId, locale])
+  @@index([channelId, locale])
+  @@map("channel_product_texts")
+}
+
+model Warehouse {
+  id        String          @id @default(cuid())
+  storeId   String
+  code      String
+  name      String
+  country   String?
+  type      WarehouseType   @default(own)
+  status    WarehouseStatus @default(active)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  store     Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  locations WarehouseLocation[]
+  lots      InventoryLot[]
+  movements InventoryMovement[]
+
+  @@unique([storeId, code])
+  @@index([storeId, status])
+  @@map("warehouses")
+}
+
+model WarehouseLocation {
+  id          String   @id @default(cuid())
+  warehouseId String
+  code        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, code])
+  @@map("warehouse_locations")
+}
+
+model InventoryLot {
+  id          String      @id @default(cuid())
+  storeId     String
+  productId   String
+  warehouseId String
+  locationId  String?
+
+  sourceType  LotSourceType
+  status      LotStatus @default(available)
+
+  qtyReceived  Int
+  qtyAvailable Int
+
+  receivedAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  unitCostAmountOriginal Decimal? @db.Decimal(18, 6)
+  unitCostCurrencyCode   String?
+  unitCostFxRate         Decimal? @db.Decimal(18, 8)
+  unitCostAmountBaseEur  Decimal? @db.Decimal(18, 6)
+
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  movements InventoryMovement[]
+
+  @@index([storeId, productId, warehouseId])
+  @@index([warehouseId, receivedAt, createdAt])
+  @@map("inventory_lots")
+}
+
+model InventoryMovement {
+  id              String      @id @default(cuid())
+  storeId         String
+  productId       String
+  warehouseId     String
+  lotId           String?
+  locationId      String?
+  type            MovementType
+
+  qtyDelta        Int
+  reason          String?
+  reference       String?
+  metadata        Json?
+
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  lot       InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+  location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdBy User? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, productId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@map("inventory_movements")
+}
+
+model Currency {
+  id        String   @id @default(cuid())
+  storeId   String
+  code      String
+  name      String
+  symbol    String?
+  isBase    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, code])
+  @@index([storeId, isBase])
+  @@map("currencies")
+}
+
+model FxRate {
+  id                String   @id @default(cuid())
+  storeId            String
+  baseCurrencyCode   String
+  quoteCurrencyCode  String
+  rate               Decimal @db.Decimal(18, 8)
+  asOfDate            DateTime
+  source             String?
+  createdAt           DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, baseCurrencyCode, quoteCurrencyCode, asOfDate])
+  @@index([storeId, asOfDate])
+  @@map("fx_rates")
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  holdingId   String?
+  storeId     String?
+  actorUserId String?
+  entityType  String
+  entityId    String
+  action      String
+  before      Json?
+  after       Json?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  holding HoldingCompany? @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  store   Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  actor   User?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_events")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
 }
