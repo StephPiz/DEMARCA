@@ -103,26 +103,42 @@ export default function TasksPage() {
           ...(notificationSeverityFilter ? { severity: notificationSeverityFilter } : {}),
           ...(notificationQuery.trim() ? { q: notificationQuery.trim() } : {}),
         }).toString();
-        const [tasksRes, membersRes, notificationsRes] = await Promise.all([
-          fetch(`${API_BASE}/tasks?${qs}`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_BASE}/stores/${sid}/team`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_BASE}/notifications?${notificationQs}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const requestJson = async (url: string) => {
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const raw = await res.text();
+          let data: Record<string, unknown> = {};
+          try {
+            data = raw ? JSON.parse(raw) : {};
+          } catch {
+            data = { error: raw || `HTTP ${res.status}` };
+          }
+          return { ok: res.ok, status: res.status, data };
+        };
+
+        const [tasksR, membersR, notificationsR] = await Promise.allSettled([
+          requestJson(`${API_BASE}/tasks?${qs}`),
+          requestJson(`${API_BASE}/stores/${sid}/team`),
+          requestJson(`${API_BASE}/notifications?${notificationQs}`),
         ]);
-        const tasksData = await tasksRes.json();
-        const membersData = await membersRes.json();
-        const notificationsData = await notificationsRes.json();
 
-        if (!tasksRes.ok) return setError(tasksData.error || "Error loading tasks");
-        if (!membersRes.ok) return setError(membersData.error || "Error loading team");
-        if (!notificationsRes.ok) return setError(notificationsData.error || "Error loading notifications");
+        if (tasksR.status === "rejected") return setError("API tasks no responde en localhost:3001");
+        if (!tasksR.value.ok) return setError(String(tasksR.value.data.error || "Error loading tasks"));
 
-        setTasks(tasksData.tasks || []);
-        setMembers((membersData.members || []).filter((m: TeamMember) => m.isActive));
-        setNotifications(notificationsData.notifications || []);
-      } catch {
-        setError("Connection error");
+        if (membersR.status === "rejected") return setError("API team no responde en localhost:3001");
+        if (!membersR.value.ok) return setError(String(membersR.value.data.error || "Error loading team"));
+
+        setTasks((tasksR.value.data.tasks as Task[]) || []);
+        setMembers(((membersR.value.data.members as TeamMember[]) || []).filter((m: TeamMember) => m.isActive));
+
+        if (notificationsR.status === "fulfilled" && notificationsR.value.ok) {
+          setNotifications((notificationsR.value.data.notifications as NotificationRow[]) || []);
+        } else if (notificationsR.status === "fulfilled" && !notificationsR.value.ok) {
+          setInfo(String(notificationsR.value.data.error || "Notificaciones no disponibles"));
+        } else {
+          setInfo("Notificaciones no disponibles");
+        }
+      } catch (e) {
+        setError(`Connection error: ${e instanceof Error ? e.message : "unknown"}`);
       }
     },
     [notificationOnlyUnread, notificationQuery, notificationSeverityFilter, notificationTypeFilter, statusFilter]
