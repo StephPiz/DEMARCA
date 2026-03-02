@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { logout, requireTokenOrRedirect } from "../lib/auth";
 
 type StoreRow = {
@@ -13,6 +14,7 @@ type StoreRow = {
 };
 
 export default function SelectStorePage() {
+  const router = useRouter();
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [error, setError] = useState("");
 
@@ -22,7 +24,7 @@ export default function SelectStorePage() {
 
     const holdingId = localStorage.getItem("selectedHoldingId");
     if (!holdingId) {
-      window.location.href = "/select-holding";
+      router.push("/select-holding");
       return;
     }
 
@@ -41,11 +43,11 @@ export default function SelectStorePage() {
         setError("Connection error (API on :3001?)");
       }
     })();
-  }, []);
+  }, [router]);
 
   function chooseStore(storeId: string) {
     localStorage.setItem("selectedStoreId", storeId);
-    window.location.href = "/dashboard";
+    router.push("/dashboard");
   }
 
   return (
@@ -88,7 +90,7 @@ export default function SelectStorePage() {
         <div className="mt-6">
           <button
             className="text-sm underline"
-            onClick={() => (window.location.href = "/select-holding")}
+            onClick={() => router.push("/select-holding")}
           >
             ← Volver a holdings
           </button>

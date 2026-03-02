@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -19,9 +13,13 @@ enum StoreStatus {
 }
 
 enum ProductType {
-  standard
+  watch
+  bag
+  perfume
+  accessory
   vintage
   refurbished
+  other
 }
 
 enum ProductStatus {
@@ -57,6 +55,8 @@ enum WarehouseStatus {
 enum LotSourceType {
   manual_init
   manual_receipt
+  purchase_order
+  return_restock
 }
 
 enum LotStatus {
@@ -68,6 +68,7 @@ enum LotStatus {
 
 enum MovementType {
   lot_create
+  receive_in
   manual_adjust
   sale_out
   return_in
@@ -78,10 +79,36 @@ enum MovementType {
 enum EanAliasSource {
   manual
   marketplace
-  worten
   idealo
   shopify
   other
+}
+
+enum ChannelListingStatus {
+  active
+  inactive
+}
+
+enum OrderStatus {
+  pending
+  paid
+  packed
+  shipped
+  delivered
+  returned
+  cancelled
+}
+
+enum PaymentStatus {
+  unpaid
+  partially_paid
+  paid
+}
+
+enum InvoiceStatus {
+  draft
+  issued
+  cancelled
 }
 
 model HoldingCompany {
@@ -96,68 +123,444 @@ model HoldingCompany {
 }
 
 model Store {
-  id        String      @id @default(cuid())
-  holdingId String
-  code      String
-  name      String
-  status    StoreStatus @default(active)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id                  String      @id @default(cuid())
+  holdingId           String
+  code                String
+  name                String
+  status              StoreStatus @default(active)
+  description         String?
+  logoUrl             String?
+  themeColor          String?
+  baseCurrencyCode    String      @default("EUR")
+  invoicePrefix       String?
+  invoiceSequenceNext Int         @default(1)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   holding HoldingCompany @relation(fields: [holdingId], references: [id])
 
-  products   Product[]
-  warehouses Warehouse[]
-  channels   SalesChannel[]
-
-  memberships     UserStoreMembership[]
-  userPermissions UserPermission[]
+  products         Product[]
+  eanAliases       EanAlias[]
+  warehouses       Warehouse[]
+  channels         SalesChannel[]
+  memberships      UserStoreMembership[]
+  userPermissions  UserPermission[]
+  inventoryLots    InventoryLot[]
+  movements        InventoryMovement[]
+  storeCurrencies  StoreCurrency[]
+  fxRates          FxRate[]
+  productOverrides ProductText[]
+  customers        Customer[]
+  salesOrders      SalesOrder[]
+  salesOrderItems  SalesOrderItem[]
+  payouts          Payout[]
+  payoutMatches    PayoutOrderMatch[]
+  invoices         Invoice[]
 
   @@unique([holdingId, code])
   @@map("stores")
 }
 
 model Product {
-  id      String        @id @default(cuid())
-  storeId String
-  ean     String
-  brand   String
-  model   String
-  type    ProductType   @default(standard)
-  status  ProductStatus @default(active)
+  id                  String        @id @default(cuid())
+  storeId             String
+  ean                 String
+  sku                 String?
+  type                ProductType   @default(other)
+  brand               String
+  model               String
+  name                String
+  status              ProductStatus @default(active)
+  isInternalEan       Boolean       @default(false)
+  internalDescription String?
+  attributes          Json?
+  mainImageUrl        String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  store Store @relation(fields: [storeId], references: [id])
+  store      Store               @relation(fields: [storeId], references: [id])
+  eanAliases EanAlias[]
+  listings   ProductChannel[]
+  texts      ProductText[]
+  lots       InventoryLot[]
+  movements  InventoryMovement[]
+  orderItems SalesOrderItem[]
 
   @@unique([storeId, ean])
+  @@index([storeId, brand, model])
   @@map("products")
 }
 
-model Warehouse {
-  id      String @id @default(cuid())
-  storeId String
-  code    String
-  name    String
+model EanAlias {
+  id        String         @id @default(cuid())
+  storeId   String
+  productId String
+  ean       String
+  source    EanAliasSource @default(manual)
+  note      String?
+  createdAt DateTime       @default(now())
 
-  store Store @relation(fields: [storeId], references: [id])
+  store   Store   @relation(fields: [storeId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, ean])
+  @@index([productId])
+  @@map("ean_aliases")
+}
+
+model SalesChannel {
+  id          String        @id @default(cuid())
+  storeId     String
+  code        String
+  name        String
+  type        ChannelType
+  status      ChannelStatus @default(active)
+  feePercent  Decimal?      @db.Decimal(8, 4)
+  cpaFixed    Decimal?      @db.Decimal(14, 2)
+  payoutTerms String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  store    Store            @relation(fields: [storeId], references: [id])
+  products ProductChannel[]
+  texts    ProductText[]
+  orders   SalesOrder[]
+  payouts  Payout[]
+
+  @@unique([storeId, code])
+  @@map("sales_channels")
+}
+
+model ProductChannel {
+  id                String               @id @default(cuid())
+  productId         String
+  channelId         String
+  listingStatus     ChannelListingStatus @default(active)
+  publicName        String?
+  channelEan        String?
+  listingUrl        String?
+  priceOriginal     Decimal?             @db.Decimal(14, 2)
+  priceCurrencyCode String?
+  priceFxToEur      Decimal?             @db.Decimal(14, 6)
+  priceEurFrozen    Decimal?             @db.Decimal(14, 2)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channel SalesChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, channelId])
+  @@map("product_channels")
+}
+
+model ProductText {
+  id          String   @id @default(cuid())
+  storeId     String
+  productId   String
+  locale      String
+  channelId   String?
+  publicName  String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store   Store         @relation(fields: [storeId], references: [id])
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channel SalesChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+
+  @@unique([productId, locale, channelId])
+  @@index([storeId, locale])
+  @@map("product_texts")
+}
+
+model Warehouse {
+  id        String          @id @default(cuid())
+  storeId   String
+  code      String
+  name      String
+  country   String?
+  type      WarehouseType   @default(own)
+  status    WarehouseStatus @default(active)
+  isDefault Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  store     Store               @relation(fields: [storeId], references: [id])
+  locations WarehouseLocation[]
+  lots      InventoryLot[]
+  movements InventoryMovement[]
 
   @@unique([storeId, code])
   @@map("warehouses")
 }
 
-model SalesChannel {
-  id      String      @id @default(cuid())
-  storeId String
-  code    String
-  name    String
-  type    ChannelType
+model WarehouseLocation {
+  id          String   @id @default(cuid())
+  warehouseId String
+  code        String
+  name        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
-  store Store @relation(fields: [storeId], references: [id])
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  lots      InventoryLot[]
 
-  @@unique([storeId, code])
-  @@map("sales_channels")
+  @@unique([warehouseId, code])
+  @@map("warehouse_locations")
+}
+
+model InventoryLot {
+  id                String        @id @default(cuid())
+  storeId           String
+  productId         String
+  warehouseId       String
+  locationId        String?
+  lotCode           String
+  sourceType        LotSourceType @default(manual_receipt)
+  status            LotStatus     @default(available)
+  supplierName      String?
+  purchasedAt       DateTime?
+  receivedAt        DateTime      @default(now())
+  quantityReceived  Int
+  quantityAvailable Int
+  unitCostOriginal  Decimal       @db.Decimal(14, 4)
+  costCurrencyCode  String
+  fxToEur           Decimal       @db.Decimal(14, 6)
+  unitCostEurFrozen Decimal       @db.Decimal(14, 4)
+  note              String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  store     Store               @relation(fields: [storeId], references: [id])
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse           @relation(fields: [warehouseId], references: [id])
+  location  WarehouseLocation?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  movements InventoryMovement[]
+
+  @@index([storeId, productId, receivedAt])
+  @@index([warehouseId, productId])
+  @@map("inventory_lots")
+}
+
+model InventoryMovement {
+  id                String       @id @default(cuid())
+  storeId           String
+  productId         String
+  lotId             String?
+  warehouseId       String
+  movementType      MovementType
+  quantity          Int
+  unitCostEurFrozen Decimal?     @db.Decimal(14, 4)
+  referenceType     String?
+  referenceId       String?
+  reason            String?
+  createdByUserId   String?
+  createdAt         DateTime     @default(now())
+
+  store     Store         @relation(fields: [storeId], references: [id])
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  lot       InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+  createdBy User?         @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, productId, createdAt])
+  @@index([storeId, warehouseId, createdAt])
+  @@map("inventory_movements")
+}
+
+model Currency {
+  code      String   @id
+  name      String
+  symbol    String?
+  createdAt DateTime @default(now())
+
+  storeCurrencies StoreCurrency[]
+  fxBaseRates     FxRate[]        @relation("FxBase")
+  fxQuoteRates    FxRate[]        @relation("FxQuote")
+
+  @@map("currencies")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  storeId   String
+  email     String?
+  fullName  String?
+  country   String?
+  city      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store  Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders SalesOrder[]
+
+  @@index([storeId, email])
+  @@map("customers")
+}
+
+model SalesOrder {
+  id                   String        @id @default(cuid())
+  storeId              String
+  orderNumber          String
+  platform             String
+  sourceChannelId      String?
+  sourceLabel          String?
+  customerId           String?
+  customerCountryCode  String?
+  currencyCode         String
+  grossAmountOriginal  Decimal       @db.Decimal(14, 2)
+  grossFxToEur         Decimal       @db.Decimal(14, 6)
+  grossAmountEurFrozen Decimal       @db.Decimal(14, 2)
+  feesEur              Decimal       @default(0) @db.Decimal(14, 2)
+  cpaEur               Decimal       @default(0) @db.Decimal(14, 2)
+  shippingCostEur      Decimal       @default(0) @db.Decimal(14, 2)
+  packagingCostEur     Decimal       @default(0) @db.Decimal(14, 2)
+  returnCostEur        Decimal       @default(0) @db.Decimal(14, 2)
+  cogsEur              Decimal       @default(0) @db.Decimal(14, 2)
+  netProfitEur         Decimal       @default(0) @db.Decimal(14, 2)
+  status               OrderStatus   @default(pending)
+  paymentStatus        PaymentStatus @default(unpaid)
+  orderedAt            DateTime      @default(now())
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  store         Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sourceChannel SalesChannel?      @relation(fields: [sourceChannelId], references: [id], onDelete: SetNull)
+  customer      Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items         SalesOrderItem[]
+  payoutMatches PayoutOrderMatch[]
+  invoice       Invoice?
+
+  @@unique([storeId, orderNumber])
+  @@index([storeId, orderedAt])
+  @@index([storeId, sourceChannelId])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id                 String   @id @default(cuid())
+  storeId            String
+  orderId            String
+  productId          String?
+  productEan         String?
+  title              String?
+  quantity           Int
+  unitPriceOriginal  Decimal  @db.Decimal(14, 2)
+  fxToEur            Decimal  @db.Decimal(14, 6)
+  unitPriceEurFrozen Decimal  @db.Decimal(14, 2)
+  revenueEurFrozen   Decimal  @db.Decimal(14, 2)
+  cogsEurFrozen      Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt          DateTime @default(now())
+
+  store   Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order   SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, orderId])
+  @@index([storeId, productId])
+  @@map("sales_order_items")
+}
+
+model Payout {
+  id              String   @id @default(cuid())
+  storeId         String
+  channelId       String?
+  payoutRef       String
+  payoutDate      DateTime
+  currencyCode    String
+  amountOriginal  Decimal  @db.Decimal(14, 2)
+  fxToEur         Decimal  @db.Decimal(14, 6)
+  amountEurFrozen Decimal  @db.Decimal(14, 2)
+  feesEur         Decimal  @default(0) @db.Decimal(14, 2)
+  adjustmentsEur  Decimal  @default(0) @db.Decimal(14, 2)
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store   Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  channel SalesChannel?      @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  matches PayoutOrderMatch[]
+
+  @@unique([storeId, payoutRef])
+  @@index([storeId, payoutDate])
+  @@map("payouts")
+}
+
+model PayoutOrderMatch {
+  id        String   @id @default(cuid())
+  storeId   String
+  payoutId  String
+  orderId   String
+  amountEur Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now())
+
+  store  Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  payout Payout     @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  order  SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([payoutId, orderId])
+  @@index([storeId, orderId])
+  @@map("payout_order_matches")
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  storeId        String
+  orderId        String        @unique
+  invoiceNumber  String
+  status         InvoiceStatus @default(issued)
+  issuedAt       DateTime      @default(now())
+  dueAt          DateTime?
+  currencyCode   String
+  subtotalEur    Decimal       @db.Decimal(14, 2)
+  taxEur         Decimal       @default(0) @db.Decimal(14, 2)
+  totalEur       Decimal       @db.Decimal(14, 2)
+  billingName    String?
+  billingAddress String?
+  billingCountry String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  store Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, invoiceNumber])
+  @@index([storeId, issuedAt])
+  @@map("invoices")
+}
+
+model StoreCurrency {
+  id           String   @id @default(cuid())
+  storeId      String
+  currencyCode String
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  currency Currency @relation(fields: [currencyCode], references: [code], onDelete: Restrict)
+
+  @@unique([storeId, currencyCode])
+  @@map("store_currencies")
+}
+
+model FxRate {
+  id                String   @id @default(cuid())
+  storeId           String
+  baseCurrencyCode  String
+  quoteCurrencyCode String
+  rate              Decimal  @db.Decimal(18, 8)
+  rateDate          DateTime
+  source            String?
+  createdAt         DateTime @default(now())
+
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  baseCurrency  Currency @relation("FxBase", fields: [baseCurrencyCode], references: [code], onDelete: Restrict)
+  quoteCurrency Currency @relation("FxQuote", fields: [quoteCurrencyCode], references: [code], onDelete: Restrict)
+
+  @@unique([storeId, baseCurrencyCode, quoteCurrencyCode, rateDate])
+  @@index([storeId, rateDate])
+  @@map("fx_rates")
 }
 
 model User {
@@ -170,9 +573,10 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  memberships   UserStoreMembership[]
-  permissions   UserPermission[]
-  refreshTokens RefreshToken[]
+  memberships      UserStoreMembership[]
+  permissions      UserPermission[]
+  refreshTokens    RefreshToken[]
+  createdMovements InventoryMovement[]
 
   @@map("users")
 }
@@ -181,7 +585,7 @@ model UserStoreMembership {
   id        String   @id @default(cuid())
   userId    String
   storeId   String
-  roleKey   String // "admin", "warehouse", "ops"
+  roleKey   String
   createdAt DateTime @default(now())
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -194,7 +598,7 @@ model UserStoreMembership {
 
 model Permission {
   id          String  @id @default(cuid())
-  key         String  @unique // "inventory.read", "products.write", etc.
+  key         String  @unique
   description String?
 
   userPermissions UserPermission[]

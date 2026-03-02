@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("admin@demarca.local");
   const [password, setPassword] = useState("Admin123!");
   const [error, setError] = useState("");
@@ -31,9 +33,12 @@ export default function LoginPage() {
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("stores", JSON.stringify(data.stores));
+      if (data?.user?.preferredLocale) {
+        localStorage.setItem("uiLocale", String(data.user.preferredLocale).toLowerCase());
+      }
 
-      window.location.href = "/select-holding";
-    } catch (err) {
+      router.push("/select-holding");
+    } catch {
       setError("Connection error (is API running on :3001?)");
     }
 

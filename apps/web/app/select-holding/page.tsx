@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { logout, requireTokenOrRedirect } from "../lib/auth";
 
 export default function SelectHoldingPage() {
+  const router = useRouter();
   const [holdings, setHoldings] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState("");
 
@@ -25,11 +27,11 @@ export default function SelectHoldingPage() {
         setError("Connection error (API on :3001?)");
       }
     })();
-  }, []);
+  }, [router]);
 
   function chooseHolding(id: string) {
     localStorage.setItem("selectedHoldingId", id);
-    window.location.href = "/select-store";
+    router.push("/select-store");
   }
 
   return (
