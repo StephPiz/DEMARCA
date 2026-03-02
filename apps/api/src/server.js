@@ -106,6 +106,16 @@ async function canManagePurchases(userId, storeId, roleKey) {
   return hasPermission(userId, storeId, "purchases.write");
 }
 
+async function canManageTasks(userId, storeId, roleKey) {
+  if (["admin", "admin_ste", "owner", "ops", "warehouse"].includes(String(roleKey || "").toLowerCase())) return true;
+  return hasPermission(userId, storeId, "tasks.write");
+}
+
+async function canUseChat(userId, storeId, roleKey) {
+  if (["admin", "admin_ste", "owner", "ops", "warehouse"].includes(String(roleKey || "").toLowerCase())) return true;
+  return hasPermission(userId, storeId, "tasks.write");
+}
+
 function normalizeMoney(value) {
   if (value === null || value === undefined) return null;
   const n = Number(value);
@@ -148,6 +158,7 @@ const PURCHASE_ORDER_STATUSES = new Set([
   "incident",
 ]);
 const THREE_PL_LEG_STATUSES = new Set(["planned", "in_transit", "delivered", "delayed"]);
+const PRESENCE_STATUSES = new Set(["online", "away", "offline"]);
 
 async function nextInvoiceNumber(tx, storeId) {
   const store = await tx.store.findUnique({
@@ -474,12 +485,13 @@ app.get("/stores/:storeId/permissions", requireAuth, async (req, res) => {
     const membership = await getStoreMembership(userId, storeId);
     if (!membership) return res.status(403).json({ error: "No access to store" });
 
-    const [canSensitive, canCatalogWrite, canOrdersWrite, canPayoutsWrite, canInvoicesWrite] = await Promise.all([
+    const [canSensitive, canCatalogWrite, canOrdersWrite, canPayoutsWrite, canInvoicesWrite, canTasksWrite] = await Promise.all([
       canReadSensitive(userId, storeId, membership.roleKey),
       canManageCatalog(userId, storeId, membership.roleKey),
       canManageOrders(userId, storeId, membership.roleKey),
       canManagePayouts(userId, storeId, membership.roleKey),
       canManageInvoices(userId, storeId, membership.roleKey),
+      canManageTasks(userId, storeId, membership.roleKey),
     ]);
 
     return res.json({
@@ -499,6 +511,7 @@ app.get("/stores/:storeId/permissions", requireAuth, async (req, res) => {
         analyticsRead: canSensitive,
         financeRead: canSensitive,
         suppliersRead: canSensitive,
+        tasksWrite: canTasksWrite,
       },
     });
   } catch (err) {
@@ -1413,6 +1426,451 @@ app.post("/three-pl/:shipmentId/legs", requireAuth, async (req, res) => {
   } catch (err) {
     if (err?.code === "P2002") return res.status(409).json({ error: "Leg order already exists for shipment" });
     console.error("POST /three-pl/:shipmentId/legs error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/stores/:storeId/team", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { storeId } = req.params;
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+
+    const members = await prisma.userStoreMembership.findMany({
+      where: { storeId },
+      include: {
+        user: {
+          select: { id: true, fullName: true, email: true, preferredLocale: true, isActive: true },
+        },
+      },
+      orderBy: [{ roleKey: "asc" }, { createdAt: "asc" }],
+      take: 300,
+    });
+
+    return res.json({
+      members: members.map((m) => ({
+        userId: m.userId,
+        roleKey: m.roleKey,
+        fullName: m.user.fullName,
+        email: m.user.email,
+        preferredLocale: m.user.preferredLocale,
+        isActive: m.user.isActive,
+      })),
+    });
+  } catch (err) {
+    console.error("GET /stores/:storeId/team error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/presence/heartbeat", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { storeId, status, lastEvent, lastPath } = req.body || {};
+    if (!storeId) return res.status(400).json({ error: "Missing storeId" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    if (status && !PRESENCE_STATUSES.has(String(status))) {
+      return res.status(400).json({ error: "Invalid presence status" });
+    }
+
+    const now = new Date();
+    const presence = await prisma.userPresence.upsert({
+      where: { storeId_userId: { storeId, userId } },
+      update: {
+        status: status || "online",
+        lastSeenAt: now,
+        lastEvent: lastEvent || null,
+        lastPath: lastPath || null,
+      },
+      create: {
+        storeId,
+        userId,
+        status: status || "online",
+        lastSeenAt: now,
+        sessionStarted: now,
+        lastEvent: lastEvent || null,
+        lastPath: lastPath || null,
+      },
+      include: {
+        user: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    return res.json({
+      presence: {
+        ...presence,
+        user: presence.user,
+      },
+    });
+  } catch (err) {
+    console.error("POST /presence/heartbeat error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/presence", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const storeId = String(req.query.storeId || "").trim();
+    if (!storeId) return res.status(400).json({ error: "Missing storeId" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+
+    const now = Date.now();
+    const onlineCutoff = new Date(now - 2 * 60 * 1000);
+    const awayCutoff = new Date(now - 10 * 60 * 1000);
+
+    const presences = await prisma.userPresence.findMany({
+      where: { storeId, lastSeenAt: { gte: awayCutoff } },
+      include: {
+        user: { select: { id: true, fullName: true, email: true } },
+      },
+      orderBy: [{ lastSeenAt: "desc" }],
+      take: 200,
+    });
+
+    const normalized = presences.map((p) => {
+      let computedStatus = p.status;
+      if (p.lastSeenAt < awayCutoff) computedStatus = "offline";
+      else if (p.lastSeenAt < onlineCutoff) computedStatus = "away";
+      else computedStatus = "online";
+      return {
+        id: p.id,
+        storeId: p.storeId,
+        userId: p.userId,
+        status: computedStatus,
+        lastSeenAt: p.lastSeenAt,
+        lastEvent: p.lastEvent,
+        lastPath: p.lastPath,
+        sessionStarted: p.sessionStarted,
+        user: p.user,
+      };
+    });
+
+    return res.json({ presences: normalized });
+  } catch (err) {
+    console.error("GET /presence error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/tasks", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const storeId = String(req.query.storeId || "").trim();
+    const status = String(req.query.status || "").trim();
+    const assignedToMe = String(req.query.assignedToMe || "").trim() === "1";
+    if (!storeId) return res.status(400).json({ error: "Missing storeId" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+
+    const tasks = await prisma.teamTask.findMany({
+      where: {
+        storeId,
+        ...(status ? { status } : {}),
+        ...(assignedToMe ? { assignedToUserId: userId } : {}),
+      },
+      include: {
+        assignedTo: { select: { id: true, fullName: true, email: true } },
+        createdBy: { select: { id: true, fullName: true, email: true } },
+      },
+      orderBy: [{ status: "asc" }, { priority: "desc" }, { dueAt: "asc" }, { createdAt: "desc" }],
+      take: 400,
+    });
+
+    return res.json({ tasks });
+  } catch (err) {
+    console.error("GET /tasks error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/tasks", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const {
+      storeId,
+      title,
+      description,
+      priority,
+      dueAt,
+      assignedToUserId,
+      linkedEntityType,
+      linkedEntityId,
+    } = req.body || {};
+
+    if (!storeId || !title) return res.status(400).json({ error: "Missing storeId/title" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    const canWrite = await canManageTasks(userId, storeId, membership.roleKey);
+    if (!canWrite) return res.status(403).json({ error: "No permission to manage tasks" });
+
+    let assignee = null;
+    if (assignedToUserId) {
+      assignee = await prisma.userStoreMembership.findFirst({
+        where: { storeId, userId: assignedToUserId },
+        select: { userId: true },
+      });
+      if (!assignee) return res.status(400).json({ error: "assignedToUserId is not a member of this store" });
+    }
+
+    const parsedDueAt = dueAt ? parseDateInput(dueAt) : null;
+    if (dueAt && !parsedDueAt) return res.status(400).json({ error: "Invalid dueAt" });
+
+    const task = await prisma.teamTask.create({
+      data: {
+        storeId,
+        title: String(title).trim(),
+        description: description || null,
+        priority: priority || "medium",
+        dueAt: parsedDueAt,
+        assignedToUserId: assignee?.userId || null,
+        linkedEntityType: linkedEntityType || null,
+        linkedEntityId: linkedEntityId || null,
+        createdByUserId: userId,
+      },
+      include: {
+        assignedTo: { select: { id: true, fullName: true, email: true } },
+        createdBy: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    return res.status(201).json({ task });
+  } catch (err) {
+    console.error("POST /tasks error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.patch("/tasks/:taskId", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { taskId } = req.params;
+    const { storeId, title, description, status, priority, dueAt, assignedToUserId } = req.body || {};
+
+    if (!storeId) return res.status(400).json({ error: "Missing storeId" });
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    const canWrite = await canManageTasks(userId, storeId, membership.roleKey);
+    if (!canWrite) return res.status(403).json({ error: "No permission to manage tasks" });
+
+    const existing = await prisma.teamTask.findFirst({
+      where: { id: taskId, storeId },
+      select: { id: true, status: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Task not found" });
+
+    let assigneeId = undefined;
+    if (assignedToUserId !== undefined) {
+      if (!assignedToUserId) {
+        assigneeId = null;
+      } else {
+        const assignee = await prisma.userStoreMembership.findFirst({
+          where: { storeId, userId: assignedToUserId },
+          select: { userId: true },
+        });
+        if (!assignee) return res.status(400).json({ error: "assignedToUserId is not a member of this store" });
+        assigneeId = assignee.userId;
+      }
+    }
+
+    const parsedDueAt = dueAt === undefined ? undefined : dueAt ? parseDateInput(dueAt) : null;
+    if (dueAt && !parsedDueAt) return res.status(400).json({ error: "Invalid dueAt" });
+
+    const nextStatus = status || existing.status;
+    const task = await prisma.teamTask.update({
+      where: { id: taskId },
+      data: {
+        ...(title !== undefined ? { title: title ? String(title).trim() : existing.title } : {}),
+        ...(description !== undefined ? { description: description || null } : {}),
+        ...(status ? { status } : {}),
+        ...(priority ? { priority } : {}),
+        ...(parsedDueAt !== undefined ? { dueAt: parsedDueAt } : {}),
+        ...(assignedToUserId !== undefined ? { assignedToUserId: assigneeId } : {}),
+        ...(nextStatus === "done" ? { closedAt: new Date() } : {}),
+      },
+      include: {
+        assignedTo: { select: { id: true, fullName: true, email: true } },
+        createdBy: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    return res.json({ task });
+  } catch (err) {
+    console.error("PATCH /tasks/:taskId error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/chat/channels", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const storeId = String(req.query.storeId || "").trim();
+    if (!storeId) return res.status(400).json({ error: "Missing storeId" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    const canChat = await canUseChat(userId, storeId, membership.roleKey);
+    if (!canChat) return res.status(403).json({ error: "No permission to use chat" });
+
+    const defaults = [
+      { code: "almacen", name: "#almacen" },
+      { code: "compras", name: "#compras" },
+      { code: "devoluciones", name: "#devoluciones" },
+    ];
+    await Promise.all(
+      defaults.map((ch) =>
+        prisma.chatChannel.upsert({
+          where: { storeId_code: { storeId, code: ch.code } },
+          update: { isActive: true },
+          create: {
+            storeId,
+            code: ch.code,
+            name: ch.name,
+            type: "public",
+            isActive: true,
+            createdByUserId: userId,
+          },
+        })
+      )
+    );
+
+    const channels = await prisma.chatChannel.findMany({
+      where: { storeId, isActive: true },
+      orderBy: { code: "asc" },
+      take: 100,
+    });
+    return res.json({ channels });
+  } catch (err) {
+    console.error("GET /chat/channels error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/chat/channels", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { storeId, code, name, type } = req.body || {};
+    if (!storeId || !code || !name) return res.status(400).json({ error: "Missing storeId/code/name" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    const canChat = await canUseChat(userId, storeId, membership.roleKey);
+    if (!canChat) return res.status(403).json({ error: "No permission to use chat" });
+
+    const channel = await prisma.chatChannel.create({
+      data: {
+        storeId,
+        code: String(code).trim().toLowerCase(),
+        name: String(name).trim(),
+        type: type || "public",
+        isActive: true,
+        createdByUserId: userId,
+      },
+    });
+    return res.status(201).json({ channel });
+  } catch (err) {
+    if (err?.code === "P2002") return res.status(409).json({ error: "Channel code already exists" });
+    console.error("POST /chat/channels error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/chat/messages", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const storeId = String(req.query.storeId || "").trim();
+    const channelId = String(req.query.channelId || "").trim();
+    const limitRaw = Number(req.query.limit || 80);
+    const limit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 80));
+    if (!storeId || !channelId) return res.status(400).json({ error: "Missing storeId/channelId" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    const canChat = await canUseChat(userId, storeId, membership.roleKey);
+    if (!canChat) return res.status(403).json({ error: "No permission to use chat" });
+
+    const channel = await prisma.chatChannel.findFirst({
+      where: { id: channelId, storeId, isActive: true },
+      select: { id: true },
+    });
+    if (!channel) return res.status(404).json({ error: "Channel not found" });
+
+    const messages = await prisma.chatMessage.findMany({
+      where: { storeId, channelId },
+      include: {
+        user: { select: { id: true, fullName: true, email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+
+    return res.json({ messages: messages.reverse() });
+  } catch (err) {
+    console.error("GET /chat/messages error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/chat/messages", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { storeId, channelId, body, linkedEntityType, linkedEntityId } = req.body || {};
+    if (!storeId || !channelId || !body) return res.status(400).json({ error: "Missing storeId/channelId/body" });
+    if (String(body).trim().length < 1) return res.status(400).json({ error: "Body is empty" });
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    const canChat = await canUseChat(userId, storeId, membership.roleKey);
+    if (!canChat) return res.status(403).json({ error: "No permission to use chat" });
+
+    const channel = await prisma.chatChannel.findFirst({
+      where: { id: channelId, storeId, isActive: true },
+      select: { id: true },
+    });
+    if (!channel) return res.status(404).json({ error: "Channel not found" });
+
+    const message = await prisma.chatMessage.create({
+      data: {
+        storeId,
+        channelId,
+        userId,
+        body: String(body).trim(),
+        linkedEntityType: linkedEntityType || null,
+        linkedEntityId: linkedEntityId || null,
+      },
+      include: {
+        user: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    await prisma.userPresence.upsert({
+      where: { storeId_userId: { storeId, userId } },
+      update: {
+        status: "online",
+        lastSeenAt: new Date(),
+        lastEvent: `Chat ${channelId}`,
+        lastPath: "/store/chat",
+      },
+      create: {
+        storeId,
+        userId,
+        status: "online",
+        lastSeenAt: new Date(),
+        lastEvent: `Chat ${channelId}`,
+        lastPath: "/store/chat",
+      },
+    });
+
+    return res.status(201).json({ message });
+  } catch (err) {
+    console.error("POST /chat/messages error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 });

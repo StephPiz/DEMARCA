@@ -234,6 +234,7 @@ async function main() {
     ["products.write", "Create/update products"],
     ["orders.write", "Create/update orders"],
     ["purchases.write", "Create/update purchases and suppliers"],
+    ["tasks.write", "Create/update team tasks"],
     ["payouts.write", "Create payouts and reconciliation"],
     ["invoices.write", "Create invoices"],
   ];
@@ -887,6 +888,126 @@ async function main() {
       fxToEur: "1.000000",
       costEurFrozen: "26.00",
       status: "in_transit",
+    },
+  });
+
+  await prisma.teamTask.upsert({
+    where: { id: "seed-task-warehouse-001" },
+    update: {
+      storeId: store.id,
+      title: "Recibir PO-2026-0001 en almacén ES",
+      description: "Verificar cantidades y confirmar lotes por línea",
+      status: "in_progress",
+      priority: "high",
+      dueAt: new Date("2026-03-05T12:00:00.000Z"),
+      linkedEntityType: "purchase_order",
+      linkedEntityId: purchase.id,
+      assignedToUserId: warehouseUser.id,
+      createdByUserId: admin.id,
+      closedAt: null,
+    },
+    create: {
+      id: "seed-task-warehouse-001",
+      storeId: store.id,
+      title: "Recibir PO-2026-0001 en almacén ES",
+      description: "Verificar cantidades y confirmar lotes por línea",
+      status: "in_progress",
+      priority: "high",
+      dueAt: new Date("2026-03-05T12:00:00.000Z"),
+      linkedEntityType: "purchase_order",
+      linkedEntityId: purchase.id,
+      assignedToUserId: warehouseUser.id,
+      createdByUserId: admin.id,
+    },
+  });
+
+  const chatWarehouse = await prisma.chatChannel.upsert({
+    where: { storeId_code: { storeId: store.id, code: "almacen" } },
+    update: { name: "#almacen", isActive: true },
+    create: {
+      storeId: store.id,
+      code: "almacen",
+      name: "#almacen",
+      type: "public",
+      isActive: true,
+      createdByUserId: admin.id,
+    },
+  });
+
+  await prisma.chatChannel.upsert({
+    where: { storeId_code: { storeId: store.id, code: "compras" } },
+    update: { name: "#compras", isActive: true },
+    create: {
+      storeId: store.id,
+      code: "compras",
+      name: "#compras",
+      type: "public",
+      isActive: true,
+      createdByUserId: admin.id,
+    },
+  });
+
+  await prisma.chatChannel.upsert({
+    where: { storeId_code: { storeId: store.id, code: "devoluciones" } },
+    update: { name: "#devoluciones", isActive: true },
+    create: {
+      storeId: store.id,
+      code: "devoluciones",
+      name: "#devoluciones",
+      type: "public",
+      isActive: true,
+      createdByUserId: admin.id,
+    },
+  });
+
+  await prisma.chatMessage.upsert({
+    where: { id: "seed-chat-msg-001" },
+    update: {
+      storeId: store.id,
+      channelId: chatWarehouse.id,
+      userId: warehouseUser.id,
+      body: "Recibi PO-2026-0001, pendiente validacion de calidad.",
+      linkedEntityType: "purchase_order",
+      linkedEntityId: purchase.id,
+    },
+    create: {
+      id: "seed-chat-msg-001",
+      storeId: store.id,
+      channelId: chatWarehouse.id,
+      userId: warehouseUser.id,
+      body: "Recibi PO-2026-0001, pendiente validacion de calidad.",
+      linkedEntityType: "purchase_order",
+      linkedEntityId: purchase.id,
+    },
+  });
+
+  await prisma.teamTask.upsert({
+    where: { id: "seed-task-finance-001" },
+    update: {
+      storeId: store.id,
+      title: "Registrar pago final proveedor",
+      description: "Cerrar conciliación PO y validar landed cost",
+      status: "open",
+      priority: "medium",
+      dueAt: new Date("2026-03-07T12:00:00.000Z"),
+      linkedEntityType: "purchase_order",
+      linkedEntityId: purchase.id,
+      assignedToUserId: admin.id,
+      createdByUserId: admin.id,
+      closedAt: null,
+    },
+    create: {
+      id: "seed-task-finance-001",
+      storeId: store.id,
+      title: "Registrar pago final proveedor",
+      description: "Cerrar conciliación PO y validar landed cost",
+      status: "open",
+      priority: "medium",
+      dueAt: new Date("2026-03-07T12:00:00.000Z"),
+      linkedEntityType: "purchase_order",
+      linkedEntityId: purchase.id,
+      assignedToUserId: admin.id,
+      createdByUserId: admin.id,
     },
   });
 

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { logout } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { useStorePermissions } from "../lib/access";
+import { usePresence } from "../lib/presence";
 
 type Props = {
   title: string;
@@ -14,6 +15,7 @@ export default function Topbar({ title, storeName }: Props) {
   const router = useRouter();
   const { locale, changeLocale, t, supportedLocales } = useI18n();
   const { permissions } = useStorePermissions();
+  const { presences, onlineCount } = usePresence(title);
 
   return (
     <div className="bg-white p-4 rounded-2xl shadow-md">
@@ -22,6 +24,16 @@ export default function Topbar({ title, storeName }: Props) {
           <h1 className="text-2xl font-bold">{title}</h1>
           <p className="text-sm text-gray-600">
             {t("store")}: <b>{storeName || "-"}</b>
+          </p>
+          <p className="text-xs text-gray-500">
+            Online: {onlineCount}
+            {presences.length > 0
+              ? ` | ${presences
+                  .filter((p) => p.status === "online")
+                  .slice(0, 3)
+                  .map((p) => `${p.user.fullName}${p.lastEvent ? ` (${p.lastEvent})` : ""}`)
+                  .join(", ")}`
+              : ""}
           </p>
         </div>
 
@@ -86,6 +98,12 @@ export default function Topbar({ title, storeName }: Props) {
               {t("returns")}
             </button>
           ) : null}
+          <button className="px-3 py-2 rounded border hover:bg-gray-50" onClick={() => router.push("/store/tasks")}>
+            {t("tasks")}
+          </button>
+          <button className="px-3 py-2 rounded border hover:bg-gray-50" onClick={() => router.push("/store/chat")}>
+            {t("chat")}
+          </button>
           <button className="px-3 py-2 rounded border hover:bg-gray-50" onClick={() => router.push("/store/settings")}>
             {t("settings")}
           </button>

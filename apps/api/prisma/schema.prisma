@@ -152,6 +152,30 @@ enum ThreePlLegStatus {
   delayed
 }
 
+enum TaskStatus {
+  open
+  in_progress
+  blocked
+  done
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+enum PresenceStatus {
+  online
+  away
+  offline
+}
+
+enum ChatChannelType {
+  public
+  direct
+}
+
 model HoldingCompany {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -204,6 +228,10 @@ model Store {
   purchasePayments  PurchaseOrderPayment[]
   threePlShipments  ThreePlShipment[]
   PurchaseOrderItem PurchaseOrderItem[]
+  tasks             TeamTask[]
+  presences         UserPresence[]
+  chatChannels      ChatChannel[]
+  chatMessages      ChatMessage[]
 
   @@unique([holdingId, code])
   @@map("stores")
@@ -767,6 +795,92 @@ model ThreePlLeg {
   @@map("three_pl_legs")
 }
 
+model TeamTask {
+  id               String       @id @default(cuid())
+  storeId          String
+  title            String
+  description      String?
+  status           TaskStatus   @default(open)
+  priority         TaskPriority @default(medium)
+  dueAt            DateTime?
+  linkedEntityType String?
+  linkedEntityId   String?
+  assignedToUserId String?
+  createdByUserId  String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  closedAt         DateTime?
+
+  store      Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  assignedTo User? @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdBy  User? @relation("TaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, status, priority])
+  @@index([storeId, assignedToUserId, status])
+  @@index([storeId, dueAt])
+  @@map("team_tasks")
+}
+
+model UserPresence {
+  id             String         @id @default(cuid())
+  storeId        String
+  userId         String
+  status         PresenceStatus @default(online)
+  lastSeenAt     DateTime       @default(now())
+  lastEvent      String?
+  lastPath       String?
+  sessionStarted DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, userId])
+  @@index([storeId, lastSeenAt])
+  @@index([storeId, status])
+  @@map("user_presences")
+}
+
+model ChatChannel {
+  id              String          @id @default(cuid())
+  storeId         String
+  code            String
+  name            String
+  type            ChatChannelType @default(public)
+  isActive        Boolean         @default(true)
+  createdByUserId String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  store     Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("ChatChannelCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  messages  ChatMessage[]
+
+  @@unique([storeId, code])
+  @@index([storeId, isActive])
+  @@map("chat_channels")
+}
+
+model ChatMessage {
+  id               String   @id @default(cuid())
+  storeId          String
+  channelId        String
+  userId           String
+  body             String
+  linkedEntityType String?
+  linkedEntityId   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  store   Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  channel ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, channelId, createdAt])
+  @@index([storeId, userId, createdAt])
+  @@map("chat_messages")
+}
+
 model Payout {
   id              String   @id @default(cuid())
   storeId         String
@@ -909,14 +1023,19 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  memberships      UserStoreMembership[]
-  permissions      UserPermission[]
-  refreshTokens    RefreshToken[]
-  createdMovements InventoryMovement[]
-  processedReturns ReturnCase[]
-  purchaseOrders   PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
-  purchasePayments PurchaseOrderPayment[] @relation("PurchasePaymentCreatedBy")
-  threePlShipments ThreePlShipment[]      @relation("ThreePlCreatedBy")
+  memberships         UserStoreMembership[]
+  permissions         UserPermission[]
+  refreshTokens       RefreshToken[]
+  createdMovements    InventoryMovement[]
+  processedReturns    ReturnCase[]
+  purchaseOrders      PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
+  purchasePayments    PurchaseOrderPayment[] @relation("PurchasePaymentCreatedBy")
+  threePlShipments    ThreePlShipment[]      @relation("ThreePlCreatedBy")
+  assignedTasks       TeamTask[]             @relation("TaskAssignedTo")
+  createdTasks        TeamTask[]             @relation("TaskCreatedBy")
+  presences           UserPresence[]
+  chatChannelsCreated ChatChannel[]          @relation("ChatChannelCreatedBy")
+  chatMessages        ChatMessage[]
 
   @@map("users")
 }
