@@ -142,6 +142,136 @@ app.get("/stores", requireAuth, async (req, res) => {
   return res.json({ stores });
 });
 
+// Inventario (por tienda)
+// GET /inventory?storeId=...&q=...&withImages=0|1
+app.get("/inventory", requireAuth, async (req, res) => {
+  const userId = req.user.sub;
+  const storeId = String(req.query.storeId || "");
+  const q = String(req.query.q || "").trim();
+  const withImages = String(req.query.withImages || "1") !== "0";
+
+  if (!storeId) return res.status(400).json({ error: "Missing storeId" });
+
+  // Seguridad: validar que el usuario pertenece a esa tienda
+  const membership = await prisma.userStoreMembership.findFirst({
+    where: { userId, storeId },
+  });
+  if (!membership) return res.status(403).json({ error: "No access to store" });
+
+  // Buscar productos de esa tienda (si tu schema no tiene product.storeId, ajustamos)
+  // Asumimos que Product tiene storeId o que existe tabla de relación.
+  // Por ahora: devolvemos todo lo que existe y filtramos por texto si hay q.
+  const products = await prisma.product.findMany({
+    where: q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } },
+            { brand: { contains: q, mode: "insensitive" } },
+            { model: { contains: q, mode: "insensitive" } },
+            { ean: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {},
+    take: 200,
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Lots de inventario de la tienda seleccionada
+  const lots = await prisma.inventoryLot.findMany({
+    where: { storeId },
+    select: {
+      id: true,
+      productId: true,
+      warehouseId: true,
+      quantityAvailable: true,
+      status: true,
+      warehouse: { select: { id: true, code: true, name: true } },
+    },
+  });
+
+  // Agrupar stock por producto y por warehouse
+  const stockByProduct = new Map();
+  for (const lot of lots) {
+    const key = lot.productId;
+    if (!stockByProduct.has(key)) stockByProduct.set(key, { total: 0, byWarehouse: {} });
+
+    const entry = stockByProduct.get(key);
+    const qty = Number(lot.quantityAvailable || 0);
+    entry.total += qty;
+
+    const whKey = lot.warehouseId;
+    entry.byWarehouse[whKey] = (entry.byWarehouse[whKey] || 0) + qty;
+    entry.warehouses = entry.warehouses || {};
+    entry.warehouses[whKey] = lot.warehouse;
+  }
+
+  // Para "Disponible en ..." -> buscar stock en otras tiendas (mismo producto)
+  const productIds = products.map((p) => p.id);
+  const otherLots = await prisma.inventoryLot.findMany({
+    where: {
+      productId: { in: productIds },
+      storeId: { not: storeId },
+      quantityAvailable: { gt: 0 },
+    },
+    select: {
+      productId: true,
+      quantityAvailable: true,
+      store: { select: { id: true, code: true, name: true } },
+    },
+  });
+
+  const availableElsewhere = new Map(); // productId -> [{storeCode, storeName, qty}]
+  for (const l of otherLots) {
+    if (!availableElsewhere.has(l.productId)) availableElsewhere.set(l.productId, []);
+    availableElsewhere.get(l.productId).push({
+      storeId: l.store.id,
+      storeCode: l.store.code,
+      storeName: l.store.name,
+      qty: Number(l.quantityAvailable || 0),
+    });
+  }
+
+  res.json({
+    items: products.map((p) => {
+      const stock = stockByProduct.get(p.id) || { total: 0, byWarehouse: {}, warehouses: {} };
+
+      return {
+        id: p.id,
+        name: p.name,
+        brand: p.brand,
+        model: p.model,
+        ean: p.ean,
+        imageUrl: withImages ? p.imageUrl || null : null,
+
+        stockTotal: stock.total,
+        stockByWarehouse: Object.entries(stock.byWarehouse).map(([warehouseId, qty]) => ({
+          warehouseId,
+          warehouseCode: stock.warehouses?.[warehouseId]?.code,
+          warehouseName: stock.warehouses?.[warehouseId]?.name,
+          qty,
+        })),
+
+        availableInOtherStores: availableElsewhere.get(p.id) || [],
+      };
+    }),
+  });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 const PORT = 3001;
 app.listen(PORT, () => {
   console.log(`🚀 API running on http://localhost:${PORT}`);

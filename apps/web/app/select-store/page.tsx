@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { logout, requireTokenOrRedirect } from "../../lib/auth";
+import { logout, requireTokenOrRedirect } from "../lib/auth";
 
 type StoreRow = {
   storeId: string;

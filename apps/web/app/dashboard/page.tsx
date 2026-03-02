@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { logout, requireTokenOrRedirect } from "../../lib/auth";
+import { logout, requireTokenOrRedirect } from "../lib/auth";
 
 export default function DashboardPage() {
   const [userName, setUserName] = useState<string>("");
