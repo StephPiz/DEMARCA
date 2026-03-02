@@ -76,7 +76,7 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-700">Holding: {holdingName || "-"}</p>
           <p className="text-sm text-gray-700 mb-3">Usuario: {userName || "-"}</p>
           <p className="text-sm text-gray-700 mb-4">
-            Fase 3 base activa: proveedores, compras (PO), 3PL/importación y flujo Fase 2 completo conectado.
+            Fase 3 cerrada: proveedores, compras completas, recepción PO con prorrateo 3PL en lotes FIFO y control 3PL operativo.
           </p>
           <div className="flex gap-2 flex-wrap">
             <button className="px-4 py-2 rounded bg-black text-white" onClick={() => goTo("/store/inventory")}>

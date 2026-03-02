@@ -440,27 +440,34 @@ async function main() {
     },
   });
 
-  await prisma.productText.upsert({
+  const existingBaseText = await prisma.productText.findFirst({
     where: {
-      productId_locale_channelId: {
-        productId: product.id,
-        locale: "es",
-        channelId: null,
-      },
-    },
-    update: {
-      publicName: "Reloj Armani AR2434",
-      description: "Descripcion interna base en espanol",
-    },
-    create: {
-      storeId: store.id,
       productId: product.id,
       locale: "es",
       channelId: null,
-      publicName: "Reloj Armani AR2434",
-      description: "Descripcion interna base en espanol",
     },
+    select: { id: true },
   });
+  if (existingBaseText) {
+    await prisma.productText.update({
+      where: { id: existingBaseText.id },
+      data: {
+        publicName: "Reloj Armani AR2434",
+        description: "Descripcion interna base en espanol",
+      },
+    });
+  } else {
+    await prisma.productText.create({
+      data: {
+        storeId: store.id,
+        productId: product.id,
+        locale: "es",
+        channelId: null,
+        publicName: "Reloj Armani AR2434",
+        description: "Descripcion interna base en espanol",
+      },
+    });
+  }
 
   const lot = await prisma.inventoryLot.upsert({
     where: { id: "seed-lot-armani-es-001" },

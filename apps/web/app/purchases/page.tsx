@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import Topbar from "../components/topbar";
 import { requireTokenOrRedirect } from "../lib/auth";
 import { useStorePermissions } from "../lib/access";
@@ -8,6 +9,7 @@ import { useStorePermissions } from "../lib/access";
 const API_BASE = "http://localhost:3001";
 
 type Supplier = { id: string; code: string; name: string };
+type Warehouse = { id: string; code: string; name: string };
 type Purchase = {
   id: string;
   poNumber: string;
@@ -25,6 +27,7 @@ export default function PurchasesPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
 
   const [poNumber, setPoNumber] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -33,29 +36,40 @@ export default function PurchasesPage() {
   const [unitCost, setUnitCost] = useState("1200");
   const [currency, setCurrency] = useState("TRY");
   const [fx, setFx] = useState("0.092");
+  const [receiveWarehouseId, setReceiveWarehouseId] = useState("");
+  const [receivingPurchaseId, setReceivingPurchaseId] = useState("");
 
-  async function loadAll(currentStoreId: string) {
+  const loadAll = useCallback(async (currentStoreId: string) => {
     const token = requireTokenOrRedirect();
     if (!token) return;
     setError("");
     try {
-      const [pRes, sRes, prRes] = await Promise.all([
+      const [pRes, sRes, prRes, bRes] = await Promise.all([
         fetch(`${API_BASE}/purchases?storeId=${encodeURIComponent(currentStoreId)}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE}/suppliers?storeId=${encodeURIComponent(currentStoreId)}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE}/products?storeId=${encodeURIComponent(currentStoreId)}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/stores/${currentStoreId}/bootstrap`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const pData = await pRes.json();
       const sData = await sRes.json();
       const prData = await prRes.json();
+      const bData = await bRes.json();
 
       if (pRes.ok) setPurchases(pData.purchases || []);
       else setError(pData.error || "Error loading purchases");
       if (sRes.ok) setSuppliers(sData.suppliers || []);
       if (prRes.ok) setProducts(prData.products || []);
+      if (bRes.ok) {
+        const nextWarehouses = bData.warehouses || [];
+        setWarehouses(nextWarehouses);
+        if (!receiveWarehouseId && nextWarehouses.length > 0) {
+          setReceiveWarehouseId(nextWarehouses[0].id);
+        }
+      }
     } catch {
       setError("Connection error");
     }
-  }
+  }, [receiveWarehouseId]);
 
   useEffect(() => {
     if (loading) return;
@@ -63,7 +77,7 @@ export default function PurchasesPage() {
     queueMicrotask(() => {
       void loadAll(storeId);
     });
-  }, [loading, storeId, permissions.financeRead]);
+  }, [loading, storeId, permissions.financeRead, loadAll]);
 
   async function createPurchase(e: React.FormEvent) {
     e.preventDefault();
@@ -96,6 +110,30 @@ export default function PurchasesPage() {
 
     setPoNumber("");
     await loadAll(storeId);
+  }
+
+  async function receivePurchase(purchaseId: string) {
+    const token = requireTokenOrRedirect();
+    if (!token || !storeId || !receiveWarehouseId) return;
+    setReceivingPurchaseId(purchaseId);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/purchases/${purchaseId}/receive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId, warehouseId: receiveWarehouseId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "No se pudo recibir PO");
+        return;
+      }
+      await loadAll(storeId);
+    } catch {
+      setError("Connection error");
+    } finally {
+      setReceivingPurchaseId("");
+    }
   }
 
   if (loading) return <div className="min-h-screen bg-gray-100 p-6">Cargando permisos...</div>;
@@ -138,6 +176,18 @@ export default function PurchasesPage() {
           </form>
         </div>
 
+        <div className="bg-white p-4 rounded-2xl shadow-md">
+          <h2 className="font-semibold mb-2">Recepción de PO</h2>
+          <select className="border rounded px-3 py-2" value={receiveWarehouseId} onChange={(e) => setReceiveWarehouseId(e.target.value)}>
+            <option value="">Selecciona almacén</option>
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.code} - {w.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-md overflow-hidden">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 border-b">
@@ -147,11 +197,12 @@ export default function PurchasesPage() {
                 <th className="text-left px-3 py-2">Estado</th>
                 <th className="text-left px-3 py-2">Fecha</th>
                 <th className="text-left px-3 py-2">Total EUR</th>
+                <th className="text-left px-3 py-2">Acción</th>
               </tr>
             </thead>
             <tbody>
               {purchases.length === 0 ? (
-                <tr><td colSpan={5} className="px-3 py-4 text-gray-500">Sin POs</td></tr>
+                <tr><td colSpan={6} className="px-3 py-4 text-gray-500">Sin POs</td></tr>
               ) : (
                 purchases.map((p) => (
                   <tr key={p.id} className="border-b">
@@ -160,6 +211,20 @@ export default function PurchasesPage() {
                     <td className="px-3 py-2">{p.status}</td>
                     <td className="px-3 py-2">{new Date(p.orderedAt).toISOString().slice(0, 10)}</td>
                     <td className="px-3 py-2">{p.totalAmountEur}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="rounded border px-2 py-1 disabled:opacity-50"
+                          disabled={!receiveWarehouseId || receivingPurchaseId === p.id}
+                          onClick={() => receivePurchase(p.id)}
+                        >
+                          {receivingPurchaseId === p.id ? "..." : "Recibir"}
+                        </button>
+                        <Link className="rounded border px-2 py-1" href={`/store/purchases/${p.id}`}>
+                          Detalle
+                        </Link>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}

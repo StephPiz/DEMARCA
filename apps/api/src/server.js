@@ -914,6 +914,41 @@ app.get("/purchases/:purchaseId", requireAuth, async (req, res) => {
     });
     if (!purchase) return res.status(404).json({ error: "Purchase not found" });
 
+    const productIds = purchase.items.map((it) => it.productId).filter(Boolean);
+    const listings =
+      productIds.length > 0
+        ? await prisma.productChannel.findMany({
+            where: {
+              productId: { in: productIds },
+              listingStatus: "active",
+              priceEurFrozen: { not: null },
+            },
+            select: { productId: true, priceEurFrozen: true },
+          })
+        : [];
+
+    const listingPriceByProduct = new Map();
+    for (const row of listings) {
+      const price = normalizeMoney(row.priceEurFrozen) || 0;
+      const current = listingPriceByProduct.get(row.productId) || 0;
+      if (price > current) listingPriceByProduct.set(row.productId, price);
+    }
+
+    const poCostEur = normalizeMoney(purchase.totalAmountEur) || 0;
+    const logistics3plEur = purchase.shipments3pl.reduce((sumShip, shipment) => {
+      const legCost = shipment.legs.reduce((sumLeg, leg) => sumLeg + (normalizeMoney(leg.costEurFrozen) || 0), 0);
+      return sumShip + legCost;
+    }, 0);
+    const landedCostEur = roundMoney(poCostEur + logistics3plEur);
+    const estimatedRevenueEur = roundMoney(
+      purchase.items.reduce((sum, item) => {
+        const estimatedPrice = item.productId ? listingPriceByProduct.get(item.productId) || 0 : 0;
+        return sum + estimatedPrice * Number(item.quantityOrdered || 0);
+      }, 0)
+    );
+    const estimatedGrossProfitEur = roundMoney(estimatedRevenueEur - landedCostEur);
+    const estimatedMarginPct = estimatedRevenueEur > 0 ? roundMoney((estimatedGrossProfitEur / estimatedRevenueEur) * 100) : null;
+
     return res.json({
       purchase: {
         ...purchase,
@@ -931,6 +966,23 @@ app.get("/purchases/:purchaseId", requireAuth, async (req, res) => {
           fxToEur: normalizeMoney(p.fxToEur),
           amountEurFrozen: normalizeMoney(p.amountEurFrozen),
         })),
+        shipments3pl: purchase.shipments3pl.map((shipment) => ({
+          ...shipment,
+          legs: shipment.legs.map((leg) => ({
+            ...leg,
+            costOriginal: normalizeMoney(leg.costOriginal),
+            fxToEur: normalizeMoney(leg.fxToEur),
+            costEurFrozen: normalizeMoney(leg.costEurFrozen),
+          })),
+        })),
+        summary: {
+          poCostEur,
+          logistics3plEur: roundMoney(logistics3plEur),
+          landedCostEur,
+          estimatedRevenueEur,
+          estimatedGrossProfitEur,
+          estimatedMarginPct,
+        },
       },
     });
   } catch (err) {
@@ -1015,6 +1067,204 @@ app.post("/purchases/:purchaseId/payments", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("POST /purchases/:purchaseId/payments error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/purchases/:purchaseId/receive", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { purchaseId } = req.params;
+    const { storeId, warehouseId, locationId, note, lines } = req.body || {};
+
+    if (!storeId || !warehouseId) return res.status(400).json({ error: "Missing storeId/warehouseId" });
+    if (lines !== undefined && !Array.isArray(lines)) {
+      return res.status(400).json({ error: "lines must be an array when provided" });
+    }
+
+    const membership = await getStoreMembership(userId, storeId);
+    if (!membership) return res.status(403).json({ error: "No access to store" });
+    const canWrite = await canManagePurchases(userId, storeId, membership.roleKey);
+    if (!canWrite) return res.status(403).json({ error: "No permission to receive purchase orders" });
+
+    const warehouse = await prisma.warehouse.findFirst({
+      where: { id: warehouseId, storeId },
+      select: { id: true },
+    });
+    if (!warehouse) return res.status(400).json({ error: "Invalid warehouseId for this store" });
+
+    if (locationId) {
+      const location = await prisma.warehouseLocation.findFirst({
+        where: { id: locationId, warehouseId },
+        select: { id: true },
+      });
+      if (!location) return res.status(400).json({ error: "Invalid locationId for selected warehouse" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const purchase = await tx.purchaseOrder.findFirst({
+        where: { id: purchaseId, storeId },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          items: true,
+          shipments3pl: { include: { legs: true } },
+        },
+      });
+      if (!purchase) return { error: { code: "NOT_FOUND" } };
+      if (purchase.status === "closed") return { error: { code: "PO_CLOSED" } };
+
+      const lineMap = new Map();
+      for (const it of purchase.items) {
+        lineMap.set(it.id, it);
+      }
+
+      const selectedLines =
+        Array.isArray(lines) && lines.length > 0
+          ? lines.map((l) => ({
+              purchaseOrderItemId: String(l.purchaseOrderItemId || "").trim(),
+              quantity: Number(l.quantity || 0),
+            }))
+          : purchase.items.map((it) => ({
+              purchaseOrderItemId: it.id,
+              quantity: Number(it.quantityOrdered) - Number(it.quantityReceived),
+            }));
+
+      if (selectedLines.length === 0) return { error: { code: "NO_LINES_TO_RECEIVE" } };
+
+      const totalPoBaseCostEur = purchase.items.reduce(
+        (sum, it) => sum + numberOrZero(it.unitCostEurFrozen) * Number(it.quantityOrdered || 0),
+        0
+      );
+      const total3plCostEur = purchase.shipments3pl.reduce((sumShip, shipment) => {
+        const legsCost = shipment.legs.reduce((sumLeg, leg) => sumLeg + numberOrZero(leg.costEurFrozen), 0);
+        return sumShip + legsCost;
+      }, 0);
+
+      for (const line of selectedLines) {
+        if (!line.purchaseOrderItemId || !Number.isInteger(line.quantity) || line.quantity <= 0) {
+          return { error: { code: "INVALID_RECEIVE_LINE" } };
+        }
+        const item = lineMap.get(line.purchaseOrderItemId);
+        if (!item) return { error: { code: "ITEM_NOT_FOUND" } };
+        const pendingQty = Number(item.quantityOrdered) - Number(item.quantityReceived);
+        if (line.quantity > pendingQty) {
+          return {
+            error: {
+              code: "QTY_EXCEEDS_PENDING",
+              purchaseOrderItemId: item.id,
+              pendingQty,
+              requestedQty: line.quantity,
+            },
+          };
+        }
+      }
+
+      const receivedLots = [];
+      const movementIds = [];
+
+      for (const line of selectedLines) {
+        const item = lineMap.get(line.purchaseOrderItemId);
+        const receiveQty = Number(line.quantity);
+        if (!item.productId) return { error: { code: "ITEM_WITHOUT_PRODUCT", purchaseOrderItemId: item.id } };
+        const lotCode = `${purchase.poNumber}-${item.id.slice(-6)}-${Date.now()}`;
+
+        const baseUnitEur = numberOrZero(item.unitCostEurFrozen);
+        const baseLineCostEur = roundMoney(baseUnitEur * receiveQty);
+        const allocationShare = totalPoBaseCostEur > 0 ? baseLineCostEur / totalPoBaseCostEur : 0;
+        const allocated3plLineCostEur = roundMoney(total3plCostEur * allocationShare);
+        const allocated3plUnitEur = receiveQty > 0 ? roundMoney(allocated3plLineCostEur / receiveQty) : 0;
+        const landedUnitEur = roundMoney(baseUnitEur + allocated3plUnitEur);
+
+        const lot = await tx.inventoryLot.create({
+          data: {
+            storeId,
+            productId: item.productId,
+            warehouseId,
+            locationId: locationId || null,
+            lotCode,
+            sourceType: "purchase_order",
+            supplierName: purchase.supplier.name,
+            purchasedAt: purchase.orderedAt,
+            quantityReceived: receiveQty,
+            quantityAvailable: receiveQty,
+            unitCostOriginal: item.unitCostOriginal,
+            costCurrencyCode: item.currencyCode,
+            fxToEur: item.fxToEur,
+            unitCostEurFrozen: String(landedUnitEur.toFixed(4)),
+            note:
+              note ||
+              `Received from PO ${purchase.poNumber} (base ${baseUnitEur.toFixed(4)} + 3PL ${allocated3plUnitEur.toFixed(
+                4
+              )} EUR/unit)`,
+          },
+        });
+
+        const movement = await tx.inventoryMovement.create({
+          data: {
+            storeId,
+            productId: item.productId,
+            lotId: lot.id,
+            warehouseId,
+            movementType: "receive_in",
+            quantity: receiveQty,
+            unitCostEurFrozen: String(landedUnitEur.toFixed(4)),
+            referenceType: "purchase_order",
+            referenceId: purchase.id,
+            reason: note || `PO receive ${purchase.poNumber}`,
+            createdByUserId: userId,
+          },
+        });
+
+        await tx.purchaseOrderItem.update({
+          where: { id: item.id },
+          data: { quantityReceived: Number(item.quantityReceived) + receiveQty },
+        });
+
+        receivedLots.push(lot);
+        movementIds.push(movement.id);
+      }
+
+      const itemsAfter = await tx.purchaseOrderItem.findMany({
+        where: { purchaseOrderId: purchase.id },
+        select: { quantityOrdered: true, quantityReceived: true },
+      });
+      const allReceived = itemsAfter.every((it) => Number(it.quantityReceived) >= Number(it.quantityOrdered));
+
+      const updatedPurchase = await tx.purchaseOrder.update({
+        where: { id: purchase.id },
+        data: {
+          status: allReceived ? "received" : "in_transit",
+          receivedAt: allReceived ? new Date() : purchase.receivedAt,
+        },
+      });
+
+      return { receivedLots, movementIds, purchase: updatedPurchase };
+    });
+
+    if (result.error) {
+      const code = result.error.code;
+      if (code === "NOT_FOUND") return res.status(404).json({ error: "Purchase not found" });
+      if (code === "PO_CLOSED") return res.status(409).json({ error: "Purchase order is closed" });
+      if (code === "NO_LINES_TO_RECEIVE") return res.status(400).json({ error: "No lines to receive" });
+      if (code === "INVALID_RECEIVE_LINE") return res.status(400).json({ error: "Invalid receive line payload" });
+      if (code === "ITEM_NOT_FOUND") return res.status(400).json({ error: "Purchase item not found in this PO" });
+      if (code === "ITEM_WITHOUT_PRODUCT") return res.status(409).json({ error: "PO item has no linked product, cannot receive to inventory", ...result.error });
+      if (code === "QTY_EXCEEDS_PENDING") return res.status(409).json({ error: "Received quantity exceeds pending", ...result.error });
+    }
+
+    return res.json({
+      ok: true,
+      purchase: { ...result.purchase, totalAmountEur: normalizeMoney(result.purchase.totalAmountEur) },
+      receivedLots: result.receivedLots.map((lot) => ({
+        ...lot,
+        unitCostOriginal: normalizeMoney(lot.unitCostOriginal),
+        fxToEur: normalizeMoney(lot.fxToEur),
+        unitCostEurFrozen: normalizeMoney(lot.unitCostEurFrozen),
+      })),
+      movementIds: result.movementIds,
+    });
+  } catch (err) {
+    console.error("POST /purchases/:purchaseId/receive error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 });
@@ -1711,35 +1961,66 @@ app.put("/products/:productId/texts", requireAuth, async (req, res) => {
     const product = await prisma.product.findFirst({ where: { id: productId, storeId }, select: { id: true } });
     if (!product) return res.status(404).json({ error: "Product not found" });
 
-    const text = await prisma.productText.upsert({
-      where: {
-        productId_locale_channelId: {
-          productId,
-          locale: String(locale).trim().toLowerCase(),
-          channelId: channelId || null,
-        },
-      },
-      update: {
-        publicName: String(publicName).trim(),
-        description: description || null,
-      },
-      create: {
-        storeId,
-        productId,
-        locale: String(locale).trim().toLowerCase(),
-        channelId: channelId || null,
-        publicName: String(publicName).trim(),
-        description: description || null,
-      },
-    });
+    const normalizedLocale = String(locale).trim().toLowerCase();
+    const normalizedChannelId = channelId || null;
+    let text;
 
-    if (channelId) {
+    if (normalizedChannelId) {
+      text = await prisma.productText.upsert({
+        where: {
+          productId_locale_channelId: {
+            productId,
+            locale: normalizedLocale,
+            channelId: normalizedChannelId,
+          },
+        },
+        update: {
+          publicName: String(publicName).trim(),
+          description: description || null,
+        },
+        create: {
+          storeId,
+          productId,
+          locale: normalizedLocale,
+          channelId: normalizedChannelId,
+          publicName: String(publicName).trim(),
+          description: description || null,
+        },
+      });
+    } else {
+      const existingBaseText = await prisma.productText.findFirst({
+        where: { productId, locale: normalizedLocale, channelId: null },
+        select: { id: true },
+      });
+      if (existingBaseText) {
+        text = await prisma.productText.update({
+          where: { id: existingBaseText.id },
+          data: {
+            publicName: String(publicName).trim(),
+            description: description || null,
+          },
+        });
+      } else {
+        text = await prisma.productText.create({
+          data: {
+            storeId,
+            productId,
+            locale: normalizedLocale,
+            channelId: null,
+            publicName: String(publicName).trim(),
+            description: description || null,
+          },
+        });
+      }
+    }
+
+    if (normalizedChannelId) {
       await prisma.channelProductText.upsert({
         where: {
           productId_salesChannelId_locale: {
             productId,
-            salesChannelId: channelId,
-            locale: String(locale).trim().toLowerCase(),
+            salesChannelId: normalizedChannelId,
+            locale: normalizedLocale,
           },
         },
         update: {
@@ -1748,8 +2029,8 @@ app.put("/products/:productId/texts", requireAuth, async (req, res) => {
         },
         create: {
           productId,
-          salesChannelId: channelId,
-          locale: String(locale).trim().toLowerCase(),
+          salesChannelId: normalizedChannelId,
+          locale: normalizedLocale,
           title: String(publicName).trim(),
           description: description || null,
         },
