@@ -143,25 +143,39 @@ app.get("/stores", requireAuth, async (req, res) => {
 });
 
 // Inventario (por tienda)
-// GET /inventory?storeId=...&q=...&withImages=0|1
+// Inventory (SAFE MVP): validates access and returns empty list for now
 app.get("/inventory", requireAuth, async (req, res) => {
-  const userId = req.user.sub;
-  const storeId = String(req.query.storeId || "");
-  const q = String(req.query.q || "").trim();
-  const withImages = String(req.query.withImages || "1") !== "0";
+  try {
+    const userId = req.user.sub;
+    const storeId = String(req.query.storeId || "");
+    const q = String(req.query.q || "").trim();
+    const withImages = String(req.query.withImages || "0") === "1";
 
-  if (!storeId) return res.status(400).json({ error: "Missing storeId" });
+    if (!storeId) return res.status(400).json({ error: "Missing storeId" });
 
-  // Seguridad: validar que el usuario pertenece a esa tienda
-  const membership = await prisma.userStoreMembership.findFirst({
-    where: { userId, storeId },
-  });
-  if (!membership) {
-  return res.status(403).json({
-    error: "No access to store",
-    debug: { userId, storeId },
-  });
-}
+    const membership = await prisma.userStoreMembership.findFirst({
+      where: { userId, storeId },
+      select: { id: true, roleKey: true },
+    });
+
+    if (!membership) {
+      return res.status(403).json({ error: "No access to store", debug: { userId, storeId } });
+    }
+
+    // IMPORTANT: We will plug real Product/Lots queries after confirming Prisma model names.
+    return res.json({
+      ok: true,
+      storeId,
+      q: q || null,
+      withImages,
+      items: [],
+      note: "Inventory endpoint OK. Next step: connect to Product + InventoryLot models.",
+    });
+  } catch (err) {
+    console.error("GET /inventory error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
 
   // Buscar productos de esa tienda (si tu schema no tiene product.storeId, ajustamos)
   // Asumimos que Product tiene storeId o que existe tabla de relación.
