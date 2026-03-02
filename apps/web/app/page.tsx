@@ -46,10 +46,13 @@ export default function LoginPage() {
         onSubmit={handleLogin}
         className="bg-white p-8 rounded-2xl shadow-md w-96"
       >
-        <h1 className="text-2xl font-bold mb-6 text-center">TAWA Admin Portal</h1>
-<p className="text-center text-sm text-gray-500 mb-6">
-  Acceso al sistema interno (multi-tienda)
-</p>
+        <h1 className="text-2xl font-bold mb-6 text-center">
+          TAWA Admin Portal
+        </h1>
+
+        <p className="text-center text-sm text-gray-500 mb-6">
+          Acceso al sistema interno (multi-tienda)
+        </p>
 
         {error && (
           <div className="bg-red-100 text-red-600 p-2 rounded mb-4 text-sm">
@@ -57,7 +60,11 @@ export default function LoginPage() {
           </div>
         )}
 
+        {/* EMAIL */}
         <input
+          id="email"
+          name="email"
+          autoComplete="email"
           className="w-full border p-2 rounded mb-4"
           type="email"
           placeholder="Email"
@@ -65,7 +72,11 @@ export default function LoginPage() {
           onChange={(e) => setEmail(e.target.value)}
         />
 
+        {/* PASSWORD */}
         <input
+          id="password"
+          name="password"
+          autoComplete="current-password"
           className="w-full border p-2 rounded mb-6"
           type="password"
           placeholder="Password"
