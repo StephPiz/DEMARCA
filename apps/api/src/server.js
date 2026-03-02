@@ -156,7 +156,12 @@ app.get("/inventory", requireAuth, async (req, res) => {
   const membership = await prisma.userStoreMembership.findFirst({
     where: { userId, storeId },
   });
-  if (!membership) return res.status(403).json({ error: "No access to store" });
+  if (!membership) {
+  return res.status(403).json({
+    error: "No access to store",
+    debug: { userId, storeId },
+  });
+}
 
   // Buscar productos de esa tienda (si tu schema no tiene product.storeId, ajustamos)
   // Asumimos que Product tiene storeId o que existe tabla de relación.
@@ -258,15 +263,7 @@ app.get("/inventory", requireAuth, async (req, res) => {
 });
 
 
-app.get("/inventory", requireAuth, async (req, res) => {
-  return res.json({
-    ok: true,
-    storeId: String(req.query.storeId || null),
-    withImages: String(req.query.withImages || null),
-    q: String(req.query.q || null),
-    note: "Inventory endpoint is alive ✅",
-  });
-});
+
 
 
 
