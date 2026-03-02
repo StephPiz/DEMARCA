@@ -8,22 +8,78 @@ generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+// Prisma 7: NO datasource/url aquí. Va en prisma.config.ts.
+
+enum StoreStatus {
+  active
+  inactive
 }
 
-enum StoreStatus { active inactive }
-enum ProductType { standard vintage refurbished }
-enum ProductStatus { active inactive archived }
-enum ChannelType { shopify idealo marketplace manual other }
-enum ChannelStatus { active inactive }
-enum WarehouseType { own external returns }
-enum WarehouseStatus { active inactive }
-enum LotSourceType { manual_init manual_receipt }
-enum LotStatus { available held non_sellable repair }
-enum MovementType { lot_create manual_adjust sale_out return_in transfer_out transfer_in }
-enum EanAliasSource { manual marketplace worten idealo shopify other }
+enum ProductType {
+  standard
+  vintage
+  refurbished
+}
+
+enum ProductStatus {
+  active
+  inactive
+  archived
+}
+
+enum ChannelType {
+  shopify
+  idealo
+  marketplace
+  manual
+  other
+}
+
+enum ChannelStatus {
+  active
+  inactive
+}
+
+enum WarehouseType {
+  own
+  external
+  returns
+}
+
+enum WarehouseStatus {
+  active
+  inactive
+}
+
+enum LotSourceType {
+  manual_init
+  manual_receipt
+}
+
+enum LotStatus {
+  available
+  held
+  non_sellable
+  repair
+}
+
+enum MovementType {
+  lot_create
+  manual_adjust
+  sale_out
+  return_in
+  transfer_out
+  transfer_in
+}
+
+enum EanAliasSource {
+  manual
+  marketplace
+  worten
+  idealo
+  shopify
+  other
+}
 
 model HoldingCompany {
   id        String   @id @default(cuid())
@@ -31,8 +87,8 @@ model HoldingCompany {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stores    Store[]
-  audit     AuditEvent[]
+  stores Store[]
+  audit  AuditEvent[]
 
   @@unique([name])
   @@map("holding_companies")
@@ -47,7 +103,7 @@ model Store {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  holding   HoldingCompany @relation(fields: [holdingId], references: [id], onDelete: Restrict)
+  holding HoldingCompany @relation(fields: [holdingId], references: [id], onDelete: Restrict)
 
   memberships UserStoreMembership[]
   products    Product[]
@@ -123,33 +179,33 @@ model UserPermission {
 }
 
 model Product {
-  id          String        @id @default(cuid())
-  storeId     String
-  sku         String?
-  ean         String
-  brand       String
-  model       String
-  type        ProductType   @default(standard)
-  status      ProductStatus @default(active)
+  id      String        @id @default(cuid())
+  storeId String
+  sku     String?
+  ean     String
+  brand   String
+  model   String
+  type    ProductType   @default(standard)
+  status  ProductStatus @default(active)
 
   costAmountOriginal Decimal? @db.Decimal(18, 6)
   costCurrencyCode   String?
   costFxRate         Decimal? @db.Decimal(18, 8)
   costAmountBaseEur  Decimal? @db.Decimal(18, 6)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  store       Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  images       ProductImage[]
-  eanAliases   EanAlias[]
-  translations ProductTranslation[]
+  images        ProductImage[]
+  eanAliases    EanAlias[]
+  translations  ProductTranslation[]
   channelPrices ProductChannelPrice[]
   channelLinks  ChannelProductLink[]
   channelTexts  ChannelProductText[]
-  lots         InventoryLot[]
-  movements    InventoryMovement[]
+  lots          InventoryLot[]
+  movements     InventoryMovement[]
 
   @@unique([storeId, ean])
   @@index([storeId, brand, model])
@@ -184,7 +240,7 @@ model EanAlias {
   @@unique([storeId, eanVariant])
   @@index([productId])
   @@map("ean_aliases")
-} 
+}
 
 model SalesChannel {
   id        String        @id @default(cuid())
@@ -196,7 +252,7 @@ model SalesChannel {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  store  Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   prices ProductChannelPrice[]
   links  ChannelProductLink[]
@@ -208,7 +264,7 @@ model SalesChannel {
 }
 
 model ProductChannelPrice {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   storeId   String
   productId String
   channelId String
@@ -230,7 +286,7 @@ model ProductChannelPrice {
 }
 
 model ChannelProductLink {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   storeId   String
   productId String
   channelId String
@@ -301,7 +357,7 @@ model Warehouse {
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
-  store     Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   locations WarehouseLocation[]
   lots      InventoryLot[]
@@ -326,14 +382,14 @@ model WarehouseLocation {
 }
 
 model InventoryLot {
-  id          String      @id @default(cuid())
+  id          String @id @default(cuid())
   storeId     String
   productId   String
   warehouseId String
   locationId  String?
 
-  sourceType  LotSourceType
-  status      LotStatus @default(available)
+  sourceType LotSourceType
+  status     LotStatus @default(available)
 
   qtyReceived  Int
   qtyAvailable Int
@@ -347,9 +403,9 @@ model InventoryLot {
   unitCostFxRate         Decimal? @db.Decimal(18, 8)
   unitCostAmountBaseEur  Decimal? @db.Decimal(18, 6)
 
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  store     Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product   Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   movements InventoryMovement[]
@@ -360,28 +416,28 @@ model InventoryLot {
 }
 
 model InventoryMovement {
-  id              String      @id @default(cuid())
-  storeId         String
-  productId       String
-  warehouseId     String
-  lotId           String?
-  locationId      String?
-  type            MovementType
+  id          String      @id @default(cuid())
+  storeId     String
+  productId   String
+  warehouseId String
+  lotId       String?
+  locationId  String?
+  type        MovementType
 
-  qtyDelta        Int
-  reason          String?
-  reference       String?
-  metadata        Json?
+  qtyDelta  Int
+  reason    String?
+  reference String?
+  metadata  Json?
 
   createdAt       DateTime @default(now())
   createdByUserId String?
 
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  lot       InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+  store     Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product   Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  lot       InventoryLot?     @relation(fields: [lotId], references: [id], onDelete: SetNull)
   location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  createdBy User? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdBy User?             @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([storeId, productId, createdAt])
   @@index([warehouseId, createdAt])
@@ -405,14 +461,14 @@ model Currency {
 }
 
 model FxRate {
-  id                String   @id @default(cuid())
-  storeId            String
-  baseCurrencyCode   String
-  quoteCurrencyCode  String
-  rate               Decimal @db.Decimal(18, 8)
-  asOfDate            DateTime
-  source             String?
-  createdAt           DateTime @default(now())
+  id               String   @id @default(cuid())
+  storeId           String
+  baseCurrencyCode  String
+  quoteCurrencyCode String
+  rate              Decimal @db.Decimal(18, 8)
+  asOfDate           DateTime
+  source            String?
+  createdAt          DateTime @default(now())
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
