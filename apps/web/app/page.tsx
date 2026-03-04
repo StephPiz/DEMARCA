@@ -341,7 +341,7 @@ export default function LoginPage() {
                   <button
                     className="h-[66px] w-full rounded-full border-2 border-dashed border-[#6142C4] bg-[#4449CC26] text-center text-[24px] text-[#6142C4] transition-all duration-200 hover:-translate-y-[1px] hover:border-[#5331bb] hover:bg-[#6142C429] hover:text-[#5331bb] hover:shadow-[0_10px_22px_rgba(97,66,196,0.22)] active:translate-y-0 active:bg-[#6142C433]"
                     type="button"
-                    onClick={() => setError("Agregar tienda: disponible pronto.")}
+                    onClick={() => router.push("/add-store")}
                   >
                     + Agregar tienda
                   </button>

@@ -515,6 +515,7 @@ model WarehouseLocation {
 
   warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   lots      InventoryLot[]
+  movements InventoryMovement[]
 
   @@unique([warehouseId, code])
   @@map("warehouse_locations")
@@ -559,6 +560,7 @@ model InventoryMovement {
   productId         String
   lotId             String?
   warehouseId       String
+  locationId        String?
   movementType      MovementType
   quantity          Int
   unitCostEurFrozen Decimal?     @db.Decimal(14, 4)
@@ -572,10 +574,12 @@ model InventoryMovement {
   product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   lot       InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
   warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+  location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
   createdBy User?         @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([storeId, productId, createdAt])
   @@index([storeId, warehouseId, createdAt])
+  @@index([locationId])
   @@map("inventory_movements")
 }
 
@@ -583,6 +587,7 @@ model Currency {
   code      String   @id
   name      String
   symbol    String?
+  decimals  Int      @default(2)
   createdAt DateTime @default(now())
 
   storeCurrencies StoreCurrency[]
@@ -1153,14 +1158,17 @@ model FxRate {
   rate              Decimal  @db.Decimal(18, 8)
   rateDate          DateTime
   source            String?
+  createdByUserId   String?
   createdAt         DateTime @default(now())
 
   store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   baseCurrency  Currency @relation("FxBase", fields: [baseCurrencyCode], references: [code], onDelete: Restrict)
   quoteCurrency Currency @relation("FxQuote", fields: [quoteCurrencyCode], references: [code], onDelete: Restrict)
+  createdBy     User?    @relation("FxRateCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@unique([storeId, baseCurrencyCode, quoteCurrencyCode, rateDate])
   @@index([storeId, rateDate])
+  @@index([createdByUserId])
   @@map("fx_rates")
 }
 
@@ -1196,6 +1204,7 @@ model User {
   auditAnchors        AuditAnchor[] @relation("AuditAnchorCreatedBy")
   processedWebhooks   IntegrationWebhookEvent[] @relation("WebhookProcessedBy")
   processedOutbox     IntegrationOutboxEvent[]  @relation("OutboxProcessedBy")
+  fxRatesCreated      FxRate[]                  @relation("FxRateCreatedBy")
 
   @@map("users")
 }

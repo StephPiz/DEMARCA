@@ -39,17 +39,18 @@ async function main() {
   });
 
   const currencies = [
-    { code: "EUR", name: "Euro", symbol: "EUR" },
-    { code: "USD", name: "US Dollar", symbol: "USD" },
-    { code: "CNY", name: "Chinese Yuan", symbol: "CNY" },
-    { code: "PEN", name: "Peruvian Sol", symbol: "PEN" },
-    { code: "TRY", name: "Turkish Lira", symbol: "TRY" },
+    { code: "EUR", name: "Euro", symbol: "EUR", decimals: 2 },
+    { code: "USD", name: "US Dollar", symbol: "USD", decimals: 2 },
+    { code: "CNY", name: "Chinese Yuan", symbol: "CNY", decimals: 2 },
+    { code: "PEN", name: "Peruvian Sol", symbol: "PEN", decimals: 2 },
+    { code: "TRY", name: "Turkish Lira", symbol: "TRY", decimals: 2 },
+    { code: "PLN", name: "Polish Zloty", symbol: "PLN", decimals: 2 },
   ];
 
   for (const c of currencies) {
     await prisma.currency.upsert({
       where: { code: c.code },
-      update: { name: c.name, symbol: c.symbol },
+      update: { name: c.name, symbol: c.symbol, decimals: c.decimals },
       create: c,
     });
 

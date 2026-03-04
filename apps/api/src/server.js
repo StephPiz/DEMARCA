@@ -3,6 +3,8 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const fs = require("fs/promises");
+const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const {
   ORDER_STATUS_FLOW,
@@ -19,7 +21,8 @@ const prisma = new PrismaClient();
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 function normalizeRoleKey(roleKey) {
   return String(roleKey || "").trim().toLowerCase();
@@ -1761,6 +1764,7 @@ async function consumeProductFifo(tx, params) {
         productId,
         lotId: lot.id,
         warehouseId: lot.warehouseId,
+        locationId: lot.locationId || null,
         movementType: "sale_out",
         quantity: -used,
         unitCostEurFrozen: lot.unitCostEurFrozen,
@@ -1827,6 +1831,57 @@ app.get("/health/deep", async (_req, res) => {
       error: "Database check failed",
       now: new Date().toISOString(),
     });
+  }
+});
+
+app.post("/uploads/store-logo", requireAuth, async (req, res) => {
+  try {
+    const { dataUrl } = req.body || {};
+    if (!dataUrl || typeof dataUrl !== "string") {
+      return res.status(400).json({ error: "Missing dataUrl" });
+    }
+
+    const match = dataUrl.match(/^data:(image\/(?:png|jpeg|jpg|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) {
+      return res.status(400).json({ error: "Invalid image format" });
+    }
+
+    const mimeType = match[1];
+    const base64Payload = match[2];
+    const buffer = Buffer.from(base64Payload, "base64");
+
+    if (!buffer.length) {
+      return res.status(400).json({ error: "Empty image" });
+    }
+    if (buffer.length > 3 * 1024 * 1024) {
+      return res.status(400).json({ error: "Image too large (max 3MB)" });
+    }
+
+    const extByMime = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/jpg": "jpg",
+      "image/webp": "webp",
+      "image/svg+xml": "svg",
+    };
+    const ext = extByMime[mimeType] || "png";
+
+    const uploadDir = path.join(__dirname, "..", "uploads", "store-logos");
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    const fileName = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
+    const filePath = path.join(uploadDir, fileName);
+    await fs.writeFile(filePath, buffer);
+
+    return res.json({
+      ok: true,
+      path: `/uploads/store-logos/${fileName}`,
+      mimeType,
+      sizeBytes: buffer.length,
+    });
+  } catch (err) {
+    console.error("POST /uploads/store-logo error:", err);
+    return res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -1956,6 +2011,173 @@ app.get("/stores", requireAuth, async (req, res) => {
     return res.json({ stores });
   } catch (err) {
     console.error("GET /stores error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/stores", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const {
+      holdingId,
+      name,
+      description,
+      logoUrl,
+      themeColor,
+      baseCurrencyCode,
+      fiscalCountryCode,
+      salesCountryCodes,
+      marketplaces,
+      warehouses,
+    } = req.body || {};
+
+    if (!holdingId || !name) return res.status(400).json({ error: "Missing holdingId or name" });
+
+    const membershipInHolding = await prisma.userStoreMembership.findFirst({
+      where: { userId, store: { holdingId: String(holdingId) } },
+      include: { store: true },
+    });
+    if (!membershipInHolding) return res.status(403).json({ error: "No access to holding" });
+
+    const canSettings = await canManageSettings(userId, membershipInHolding.storeId, membershipInHolding.roleKey);
+    if (!canSettings) return res.status(403).json({ error: "No permission to create stores" });
+
+    const baseCurrency = parseCurrencyCode(baseCurrencyCode) || "EUR";
+    const currencyExists = await prisma.currency.findUnique({ where: { code: baseCurrency }, select: { code: true } });
+    if (!currencyExists) {
+      return res.status(400).json({ error: `Currency ${baseCurrency} is not configured` });
+    }
+
+    const sanitizeCodeBase = (value, fallback) => {
+      const normalized = String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      return (normalized || fallback).slice(0, 20);
+    };
+
+    const uniqueNames = (rows) =>
+      Array.from(
+        new Map(
+          (Array.isArray(rows) ? rows : [])
+            .map((row) => String(row || "").trim())
+            .filter((row) => row.length)
+            .map((row) => [row.toLowerCase(), row])
+        ).values()
+      );
+
+    const selectedMarketplaces = uniqueNames(marketplaces);
+    const selectedWarehouses = uniqueNames(warehouses);
+
+    const created = await prisma.$transaction(async (tx) => {
+      const baseCode = sanitizeCodeBase(name, "STORE");
+      let storeCode = baseCode;
+      let suffix = 2;
+      while (await tx.store.findFirst({ where: { holdingId: String(holdingId), code: storeCode }, select: { id: true } })) {
+        storeCode = `${baseCode}_${suffix}`;
+        suffix += 1;
+      }
+
+      const createdStore = await tx.store.create({
+        data: {
+          holdingId: String(holdingId),
+          code: storeCode,
+          name: String(name).trim(),
+          description: description ? String(description).trim() : null,
+          logoUrl: logoUrl ? String(logoUrl).trim() : null,
+          themeColor: themeColor ? String(themeColor).trim() : null,
+          baseCurrencyCode: baseCurrency,
+          invoicePrefix: `${storeCode.slice(0, 8)}-${new Date().getFullYear()}-`,
+        },
+      });
+
+      await tx.userStoreMembership.create({
+        data: {
+          userId,
+          storeId: createdStore.id,
+          roleKey: membershipInHolding.roleKey || "admin_ste",
+        },
+      });
+
+      await tx.storeCurrency.create({
+        data: {
+          storeId: createdStore.id,
+          currencyCode: baseCurrency,
+          enabled: true,
+        },
+      });
+
+      const warehouseRows = (selectedWarehouses.length ? selectedWarehouses : ["MAIN"]).slice(0, 20);
+      for (let i = 0; i < warehouseRows.length; i += 1) {
+        const warehouseName = warehouseRows[i];
+        const warehouseCode = sanitizeCodeBase(warehouseName, `WH_${i + 1}`).slice(0, 12);
+        const wh = await tx.warehouse.create({
+          data: {
+            storeId: createdStore.id,
+            code: warehouseCode,
+            name: warehouseName,
+            country: fiscalCountryCode ? String(fiscalCountryCode).toUpperCase() : null,
+            type: "own",
+            status: "active",
+            isDefault: i === 0,
+          },
+        });
+        await tx.warehouseLocation.create({
+          data: {
+            warehouseId: wh.id,
+            code: "A1",
+            name: "Estanteria A1",
+            isActive: true,
+          },
+        });
+      }
+
+      for (let i = 0; i < selectedMarketplaces.length; i += 1) {
+        const channelName = selectedMarketplaces[i];
+        const channelCode = sanitizeCodeBase(channelName, `CHANNEL_${i + 1}`).slice(0, 18);
+        const lower = channelName.toLowerCase();
+        const channelType = lower.includes("shopify")
+          ? "shopify"
+          : lower.includes("idealo")
+          ? "idealo"
+          : lower.includes("market")
+          ? "marketplace"
+          : "manual";
+
+        await tx.salesChannel.create({
+          data: {
+            storeId: createdStore.id,
+            code: channelCode,
+            name: channelName,
+            type: channelType,
+            status: "active",
+            countryCode: fiscalCountryCode ? String(fiscalCountryCode).toUpperCase() : null,
+            currencyCode: baseCurrency,
+          },
+        });
+      }
+
+      return createdStore;
+    });
+
+    return res.status(201).json({
+      store: {
+        id: created.id,
+        code: created.code,
+        name: created.name,
+        baseCurrencyCode: created.baseCurrencyCode,
+      },
+      profile: {
+        fiscalCountryCode: fiscalCountryCode ? String(fiscalCountryCode).toUpperCase() : null,
+        salesCountryCodes: Array.isArray(salesCountryCodes) ? salesCountryCodes : [],
+        marketplaces: selectedMarketplaces,
+        warehouses: selectedWarehouses.length ? selectedWarehouses : ["MAIN"],
+      },
+    });
+  } catch (err) {
+    console.error("POST /stores error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 });
@@ -3485,6 +3707,7 @@ app.post("/purchases/:purchaseId/receive", requireAuth, async (req, res) => {
             productId: item.productId,
             lotId: lot.id,
             warehouseId,
+            locationId: locationId || null,
             movementType: "receive_in",
             quantity: receiveQty,
             unitCostEurFrozen: String(landedUnitEur.toFixed(4)),
@@ -5848,6 +6071,7 @@ app.post("/inventory/receive", requireAuth, async (req, res) => {
           productId,
           lotId: lot.id,
           warehouseId,
+          locationId: locationId || null,
           movementType: "receive_in",
           quantity: Number(quantity),
           unitCostEurFrozen: lot.unitCostEurFrozen,
@@ -7008,6 +7232,7 @@ app.post("/returns", requireAuth, async (req, res) => {
             productId: product.id,
             lotId: lot.id,
             warehouseId: warehouse.id,
+            locationId: null,
             movementType: "return_in",
             quantity: Number(quantity),
             unitCostEurFrozen: "0",
@@ -9317,6 +9542,7 @@ app.get("/products/:productId", requireAuth, async (req, res) => {
           orderBy: { createdAt: "desc" },
           include: {
             warehouse: { select: { id: true, code: true, name: true } },
+            location: { select: { id: true, code: true, name: true } },
             createdBy: { select: { id: true, fullName: true, email: true } },
           },
         },
@@ -9366,6 +9592,7 @@ app.get("/products/:productId", requireAuth, async (req, res) => {
       productId: mv.productId,
       lotId: mv.lotId,
       warehouseId: mv.warehouseId,
+      locationId: mv.locationId,
       movementType: mv.movementType,
       quantity: mv.quantity,
       unitCostEurFrozen: sensitive ? normalizeMoney(mv.unitCostEurFrozen) : null,
@@ -9375,6 +9602,7 @@ app.get("/products/:productId", requireAuth, async (req, res) => {
       createdByUserId: mv.createdByUserId,
       createdAt: mv.createdAt,
       warehouse: mv.warehouse,
+      location: mv.location,
       createdBy: mv.createdBy,
     }));
 
@@ -9393,6 +9621,17 @@ app.get("/products/:productId", requireAuth, async (req, res) => {
 });
 
 const PORT = Number(process.env.PORT || 3001);
+app.use((err, _req, res, _next) => {
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "Imagen demasiado grande (max 3MB)." });
+  }
+  if (err instanceof SyntaxError && "body" in err) {
+    return res.status(400).json({ error: "JSON invalido en request." });
+  }
+  console.error("Unhandled API error:", err);
+  return res.status(500).json({ error: "Server error" });
+});
+
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
   if (auditJobState.enabled) {

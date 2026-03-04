@@ -31,7 +31,6 @@ export default function PayoutsPage() {
   const [error, setError] = useState("");
   const [summary, setSummary] = useState<{ netExpectedEur: number; reconciledEur: number; discrepancyEur: number } | null>(null);
   const [alerts, setAlerts] = useState<string[]>([]);
-  const [summary, setSummary] = useState<{ netExpectedEur: number; reconciledEur: number; discrepancyEur: number } | null>(null);
 
   const [payoutRef, setPayoutRef] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));

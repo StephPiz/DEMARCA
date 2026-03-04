@@ -68,7 +68,7 @@ export default function SelectStorePage() {
     router.push("/dashboard");
   }
 
-  const demarcaStore = stores.find((s) => s.storeCode.toUpperCase() === "DEMARCA") || stores[0] || null;
+  const orderedStores = [...stores].sort((a, b) => a.storeName.localeCompare(b.storeName, "es"));
 
   return (
     <div
@@ -125,21 +125,29 @@ export default function SelectStorePage() {
               </div>
             ) : null}
 
-            <div className="mt-[120px] flex flex-col gap-[18px]" style={{ fontFamily: "var(--font-select-store-body)" }}>
-              <button
-                className="h-[66px] w-full rounded-full border-none bg-white text-center text-[24px] text-[#666] transition-colors hover:bg-[#4449CD26] active:bg-[#4449CD26]"
-                style={{ boxShadow: "inset 0px 0px 0px 1px rgba(15,20,40,0.06)" }}
-                type="button"
-                onClick={() => demarcaStore && chooseStore(demarcaStore.storeId)}
-                disabled={!demarcaStore}
-              >
-                {demarcaStore ? demarcaStore.storeName.toLowerCase() : "demarca"}
-              </button>
+            <div className="mt-[120px] flex max-h-[360px] flex-col gap-[18px] overflow-y-auto pr-1" style={{ fontFamily: "var(--font-select-store-body)" }}>
+              {orderedStores.length > 0 ? (
+                orderedStores.map((store) => (
+                  <button
+                    key={store.storeId}
+                    className="h-[66px] w-full rounded-full border-none bg-white text-center text-[24px] text-[#666] transition-colors hover:bg-[#4449CD26] active:bg-[#4449CD26]"
+                    style={{ boxShadow: "inset 0px 0px 0px 1px rgba(15,20,40,0.06)" }}
+                    type="button"
+                    onClick={() => chooseStore(store.storeId)}
+                  >
+                    {store.storeName.toLowerCase()}
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-xl bg-white px-4 py-3 text-center text-[16px] text-[#666]">
+                  No hay tiendas disponibles
+                </div>
+              )}
 
               <button
                 className="h-[66px] w-full rounded-full border-2 border-dashed border-[#6142C4] bg-[#4449CC26] text-center text-[24px] text-[#6142C4] transition-all duration-200 hover:-translate-y-[1px] hover:border-[#5331bb] hover:bg-[#6142C429] hover:text-[#5331bb] hover:shadow-[0_10px_22px_rgba(97,66,196,0.22)] active:translate-y-0 active:bg-[#6142C433]"
                 type="button"
-                onClick={() => setError("Agregar tienda: disponible pronto.")}
+                onClick={() => router.push("/add-store")}
               >
                 + Agregar tienda
               </button>

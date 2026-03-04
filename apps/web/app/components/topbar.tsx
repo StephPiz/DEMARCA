@@ -168,6 +168,11 @@ export default function Topbar({ title, storeName }: Props) {
             <button className="px-3 py-2 rounded border hover:bg-gray-50" onClick={() => router.push("/store/inventory")}>
               {t("inventory")}
             </button>
+            {permissions.inventoryWrite ? (
+              <button className="px-3 py-2 rounded border hover:bg-gray-50" onClick={() => router.push("/store/scanner")}>
+                Escaner
+              </button>
+            ) : null}
             <button className="px-3 py-2 rounded border hover:bg-gray-50" onClick={() => router.push("/store/products")}>
               {t("products")}
             </button>
