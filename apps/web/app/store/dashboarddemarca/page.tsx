@@ -2915,14 +2915,13 @@ export default function DashboardDemarcaPage() {
                     </button>
                   </div>
 
-                  <div className="mt-6 flex min-h-0 flex-1 flex-col rounded-b-2xl bg-[#E6E8EA]">
-                    <div className="border-b border-[#666666] px-2">
-                      <div className="rounded-t-2xl bg-[#BFBFBF] px-4 py-3 text-[14px] text-[#1A213D]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
-                        Información del almacén
-                      </div>
+                  <div className="mt-6 border-b border-[#666666] px-2">
+                    <div className="rounded-t-2xl bg-[#BFBFBF] px-4 py-3 text-[14px] text-[#1A213D]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                      Información del almacén
                     </div>
+                  </div>
 
-                    <div className="min-h-0 w-full flex-1 overflow-y-auto px-10 pb-24 pt-6">
+                  <div className="relative min-h-0 flex-1 w-full overflow-y-auto rounded-b-2xl bg-[#E6E8EA] px-10 pb-24 pt-6">
                     <div className="grid grid-cols-3 gap-8 text-[#2B334B]">
                       <div>
                         <div className="text-[16px]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>Nombre de almacén</div>
@@ -3110,7 +3109,6 @@ export default function DashboardDemarcaPage() {
                       >
                         {warehouseSaving ? "Guardando..." : "Confirmar"}
                       </button>
-                    </div>
                     </div>
                   </div>
                 </div>
