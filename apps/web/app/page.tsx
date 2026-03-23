@@ -320,7 +320,7 @@ export default function LoginPage() {
                   </button>
                 </form>
               </>
-            ) : (
+            ) : desktopStep === "space" ? (
               <>
                 <h2
                   className="mt-[96px] -mb-[24px] translate-y-[60px] text-center text-[31px] font-black leading-[1.1]"
