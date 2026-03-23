@@ -354,6 +354,14 @@ export default function LoginPage() {
               </>
             ) : (
               <>
+                <button
+                  type="button"
+                  className="absolute right-[42px] top-[22px] text-[20px] text-[#5E6785] transition-colors hover:text-[#121B42]"
+                  style={{ fontFamily: "var(--font-login-body)" }}
+                  onClick={() => setDesktopStep("space")}
+                >
+                  Volver
+                </button>
                 <p
                   className="mb-[14px] text-[36px] font-extrabold leading-[36px]"
                   style={{ fontFamily: "var(--font-login-heading)" }}
@@ -419,14 +427,6 @@ export default function LoginPage() {
                     type="submit"
                   >
                     {dashboardLoading ? "Loading..." : "Entrar al dashboard"}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="text-[18px] text-[#5E6785] transition-colors hover:text-[#121B42]"
-                    onClick={() => setDesktopStep("space")}
-                  >
-                    Volver
                   </button>
                 </form>
               </>
@@ -510,6 +510,14 @@ export default function LoginPage() {
             </div>
           ) : mobileStep === "dashboard-login" ? (
             <div className="mx-auto flex h-full w-full max-w-[420px] flex-col justify-center px-7 pb-8 pt-8 text-[#121633]">
+              <button
+                type="button"
+                className="mb-6 ml-auto text-[18px] text-[#5E6785] transition-colors hover:text-[#121B42]"
+                style={{ fontFamily: "var(--font-login-body)" }}
+                onClick={() => setMobileStep("space")}
+              >
+                Volver
+              </button>
               <p className="mb-[14px] text-[36px] font-extrabold leading-[36px]" style={{ fontFamily: "var(--font-login-heading)" }}>
                 TAWA Co
               </p>
@@ -560,14 +568,6 @@ export default function LoginPage() {
                   type="submit"
                 >
                   {dashboardLoading ? "Loading..." : "Entrar al dashboard"}
-                </button>
-
-                <button
-                  type="button"
-                  className="text-[18px] text-[#5E6785]"
-                  onClick={() => setMobileStep("space")}
-                >
-                  Volver
                 </button>
               </form>
             </div>
