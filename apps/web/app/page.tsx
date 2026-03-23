@@ -38,8 +38,8 @@ export default function LoginPage() {
   });
   const [desktopStep, setDesktopStep] = useState<"login" | "space">("login");
   const [mobileStep, setMobileStep] = useState<"login" | "space" | "store">("login");
-  const [email, setEmail] = useState("admin@demarca.local");
-  const [password, setPassword] = useState("Admin123!");
+  const [email, setEmail] = useState("steph@tawaco.local");
+  const [password, setPassword] = useState("Steph123!");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);

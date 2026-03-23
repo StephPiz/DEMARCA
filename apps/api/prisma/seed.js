@@ -263,6 +263,56 @@ async function main() {
     create: { userId: admin.id, storeId: store.id, roleKey: "admin" },
   });
 
+  const adminStephPasswordHash = await bcrypt.hash("Steph123!", 10);
+
+  const adminSteph = await prisma.user.upsert({
+    where: { email: "steph@tawaco.local" },
+    update: {
+      passwordHash: adminStephPasswordHash,
+      fullName: "Steph TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+    create: {
+      email: "steph@tawaco.local",
+      passwordHash: adminStephPasswordHash,
+      fullName: "Steph TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+  });
+
+  await prisma.userStoreMembership.upsert({
+    where: { userId_storeId: { userId: adminSteph.id, storeId: store.id } },
+    update: { roleKey: "admin" },
+    create: { userId: adminSteph.id, storeId: store.id, roleKey: "admin" },
+  });
+
+  const adminAlePasswordHash = await bcrypt.hash("Ale123!", 10);
+
+  const adminAle = await prisma.user.upsert({
+    where: { email: "ale@tawaco.local" },
+    update: {
+      passwordHash: adminAlePasswordHash,
+      fullName: "Ale TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+    create: {
+      email: "ale@tawaco.local",
+      passwordHash: adminAlePasswordHash,
+      fullName: "Ale TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+  });
+
+  await prisma.userStoreMembership.upsert({
+    where: { userId_storeId: { userId: adminAle.id, storeId: store.id } },
+    update: { roleKey: "admin" },
+    create: { userId: adminAle.id, storeId: store.id, roleKey: "admin" },
+  });
+
   const warehouseUser = await prisma.user.upsert({
     where: { email: "warehouse@demarca.local" },
     update: {
@@ -1288,6 +1338,8 @@ async function main() {
   console.log("Holding:", holding.name);
   console.log("Store:", store.name);
   console.log("Admin:", admin.email, "password: Admin123!");
+  console.log("Steph Admin:", adminSteph.email, "password: Steph123!");
+  console.log("Ale Admin:", adminAle.email, "password: Ale123!");
   console.log("Admin KAT:", adminKat.email, "password: Admin123!");
   console.log("Warehouse user:", warehouseUser.email, "password: Admin123!");
 }
