@@ -40,8 +40,8 @@ export default function LoginPage() {
   });
   const [desktopStep, setDesktopStep] = useState<"login" | "space" | "dashboard-login">("login");
   const [mobileStep, setMobileStep] = useState<"login" | "space" | "store" | "dashboard-login">("login");
-  const [email, setEmail] = useState("steph@tawaco.local");
-  const [password, setPassword] = useState("Steph123!");
+  const [email, setEmail] = useState("admin@tawaco.local");
+  const [password, setPassword] = useState("Admin123!");
   const [dashboardEmail, setDashboardEmail] = useState("steph@tawaco.local");
   const [dashboardPassword, setDashboardPassword] = useState("Steph123!");
   const [showPassword, setShowPassword] = useState(false);

@@ -263,6 +263,79 @@ async function main() {
     create: { userId: admin.id, storeId: store.id, roleKey: "admin" },
   });
 
+  const adminTawa = await prisma.user.upsert({
+    where: { email: "admin@tawaco.local" },
+    update: {
+      passwordHash,
+      fullName: "Admin TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+    create: {
+      email: "admin@tawaco.local",
+      passwordHash,
+      fullName: "Admin TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+  });
+
+  await prisma.userStoreMembership.upsert({
+    where: { userId_storeId: { userId: adminTawa.id, storeId: store.id } },
+    update: { roleKey: "admin" },
+    create: { userId: adminTawa.id, storeId: store.id, roleKey: "admin" },
+  });
+
+  const admin2PasswordHash = await bcrypt.hash("Admin2123!", 10);
+
+  const admin2Tawa = await prisma.user.upsert({
+    where: { email: "admin2@tawaco.local" },
+    update: {
+      passwordHash: admin2PasswordHash,
+      fullName: "Admin2 TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+    create: {
+      email: "admin2@tawaco.local",
+      passwordHash: admin2PasswordHash,
+      fullName: "Admin2 TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+  });
+
+  await prisma.userStoreMembership.upsert({
+    where: { userId_storeId: { userId: admin2Tawa.id, storeId: store.id } },
+    update: { roleKey: "admin" },
+    create: { userId: admin2Tawa.id, storeId: store.id, roleKey: "admin" },
+  });
+
+  const admin3PasswordHash = await bcrypt.hash("Admin3123!", 10);
+
+  const admin3Tawa = await prisma.user.upsert({
+    where: { email: "admin3@tawaco.local" },
+    update: {
+      passwordHash: admin3PasswordHash,
+      fullName: "Admin3 TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+    create: {
+      email: "admin3@tawaco.local",
+      passwordHash: admin3PasswordHash,
+      fullName: "Admin3 TAWA",
+      preferredLocale: "es",
+      isActive: true,
+    },
+  });
+
+  await prisma.userStoreMembership.upsert({
+    where: { userId_storeId: { userId: admin3Tawa.id, storeId: store.id } },
+    update: { roleKey: "admin" },
+    create: { userId: admin3Tawa.id, storeId: store.id, roleKey: "admin" },
+  });
+
   const adminStephPasswordHash = await bcrypt.hash("Steph123!", 10);
 
   const adminSteph = await prisma.user.upsert({
@@ -1338,6 +1411,9 @@ async function main() {
   console.log("Holding:", holding.name);
   console.log("Store:", store.name);
   console.log("Admin:", admin.email, "password: Admin123!");
+  console.log("TAWA Admin:", adminTawa.email, "password: Admin123!");
+  console.log("TAWA Admin2:", admin2Tawa.email, "password: Admin2123!");
+  console.log("TAWA Admin3:", admin3Tawa.email, "password: Admin3123!");
   console.log("Steph Admin:", adminSteph.email, "password: Steph123!");
   console.log("Ale Admin:", adminAle.email, "password: Ale123!");
   console.log("Admin KAT:", adminKat.email, "password: Admin123!");
