@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import localFont from "next/font/local";
 import Topbar from "../components/topbar";
@@ -126,7 +126,7 @@ function priorityBadge(priority: TicketPriority) {
   }
 }
 
-export default function SupportPage() {
+function SupportPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qFromUrl = useMemo(() => (searchParams.get("q") || "").trim(), [searchParams]);
@@ -484,5 +484,13 @@ export default function SupportPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SupportPage() {
+  return (
+    <Suspense fallback={<div className={`${headingFont.variable} ${bodyFont.variable} min-h-screen bg-[#E8EAEC] p-6`}>Cargando soporte...</div>}>
+      <SupportPageContent />
+    </Suspense>
   );
 }
