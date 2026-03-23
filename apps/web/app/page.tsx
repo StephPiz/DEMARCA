@@ -20,6 +20,8 @@ const bodyFont = localFont({
   variable: "--font-login-body",
 });
 
+const DASHBOARD_ADMIN_EMAILS = new Set(["steph@tawaco.local", "ale@tawaco.local"]);
+
 export default function LoginPage() {
   const router = useRouter();
   const [mobileStores, setMobileStores] = useState<Array<{ storeId: string; storeName: string }>>(() => {
@@ -36,13 +38,18 @@ export default function LoginPage() {
       return [];
     }
   });
-  const [desktopStep, setDesktopStep] = useState<"login" | "space">("login");
-  const [mobileStep, setMobileStep] = useState<"login" | "space" | "store">("login");
+  const [desktopStep, setDesktopStep] = useState<"login" | "space" | "dashboard-login">("login");
+  const [mobileStep, setMobileStep] = useState<"login" | "space" | "store" | "dashboard-login">("login");
   const [email, setEmail] = useState("steph@tawaco.local");
   const [password, setPassword] = useState("Steph123!");
+  const [dashboardEmail, setDashboardEmail] = useState("steph@tawaco.local");
+  const [dashboardPassword, setDashboardPassword] = useState("Steph123!");
   const [showPassword, setShowPassword] = useState(false);
+  const [showDashboardPassword, setShowDashboardPassword] = useState(false);
   const [error, setError] = useState("");
+  const [dashboardError, setDashboardError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [showMobileSplash, setShowMobileSplash] = useState(true);
   const [mobileFormVisible, setMobileFormVisible] = useState(false);
   const girlStyle: React.CSSProperties = {
@@ -76,24 +83,18 @@ export default function LoginPage() {
     return () => window.cancelAnimationFrame(raf);
   }, [showMobileSplash]);
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
+  async function loginWithCredentials(nextEmail: string, nextPassword: string) {
     try {
       const res = await fetch("http://localhost:3001/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: nextEmail, password: nextPassword }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Login failed");
-        setLoading(false);
-        return;
+        return { ok: false as const, error: data.error || "Login failed" };
       }
 
       localStorage.setItem("accessToken", data.accessToken);
@@ -115,13 +116,46 @@ export default function LoginPage() {
 
       setDesktopStep("space");
       setMobileStep("space");
-      setLoading(false);
-      return;
+      return { ok: true as const };
     } catch {
-      setError("Connection error (is API running on :3001?)");
+      return { ok: false as const, error: "Connection error (is API running on :3001?)" };
+    }
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    const result = await loginWithCredentials(email, password);
+    if (!result.ok) {
+      setError(result.error);
     }
 
     setLoading(false);
+  }
+
+  async function handleDashboardLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setDashboardLoading(true);
+    setDashboardError("");
+
+    const normalizedEmail = dashboardEmail.trim().toLowerCase();
+    if (!DASHBOARD_ADMIN_EMAILS.has(normalizedEmail)) {
+      setDashboardError("Usa un acceso autorizado de dashboard.");
+      setDashboardLoading(false);
+      return;
+    }
+
+    const result = await loginWithCredentials(normalizedEmail, dashboardPassword);
+    if (!result.ok) {
+      setDashboardError(result.error);
+      setDashboardLoading(false);
+      return;
+    }
+
+    router.push("/select-holding");
+    setDashboardLoading(false);
   }
 
   function PasswordIcon({ visible }: { visible: boolean }) {
@@ -277,7 +311,10 @@ export default function LoginPage() {
                     className="h-[66px] w-full rounded-full border-none bg-white text-center text-[24px] text-[#666] transition-colors hover:bg-[#4449CD26] active:bg-[#4449CD26]"
                     style={{ boxShadow: "inset 0px 0px 0px 1px rgba(15,20,40,0.06)" }}
                     type="button"
-                    onClick={() => router.push("/select-holding")}
+                    onClick={() => {
+                      setDashboardError("");
+                      setDesktopStep("dashboard-login");
+                    }}
                   >
                     Dashboard TAWA Co
                   </button>
@@ -291,6 +328,84 @@ export default function LoginPage() {
                     Ir a Tienda
                   </button>
                 </div>
+              </>
+            ) : (
+              <>
+                <p
+                  className="mb-[14px] text-[36px] font-extrabold leading-[36px]"
+                  style={{ fontFamily: "var(--font-login-heading)" }}
+                >
+                  TAWA Co
+                </p>
+                <h2
+                  className="mt-[10px] max-w-[260px] text-[39px] font-black leading-[58px]"
+                  style={{ fontFamily: "var(--font-login-heading)" }}
+                >
+                  Acceso dashboard
+                  <br />
+                </h2>
+
+                <form onSubmit={handleDashboardLogin} className="mt-[120px] flex flex-col gap-[18px]" style={{ fontFamily: "var(--font-login-body)" }}>
+                  {dashboardError ? (
+                    <div className="rounded-xl bg-red-100 px-4 py-3 text-base text-red-700">
+                      {dashboardError}
+                    </div>
+                  ) : null}
+
+                  <input
+                    id="dashboard-email"
+                    name="dashboard-email"
+                    autoComplete="username"
+                    className="h-[66px] w-full rounded-full border-none bg-white px-[24px] text-[24px] text-[#1A2238] outline-none placeholder:text-[rgba(20,25,45,0.35)]"
+                    style={{ boxShadow: "inset 0px 0px 0px 1px rgba(15,20,40,0.06)" }}
+                    type="email"
+                    placeholder="Email dashboard"
+                    value={dashboardEmail}
+                    onChange={(e) => setDashboardEmail(e.target.value)}
+                  />
+
+                  <div
+                    className="relative h-[66px] w-full rounded-full bg-white"
+                    style={{ boxShadow: "inset 0px 0px 0px 1px rgba(15,20,40,0.06)" }}
+                  >
+                    <input
+                      id="dashboard-password"
+                      name="dashboard-password"
+                      autoComplete="current-password"
+                      className="h-[66px] w-full rounded-full border-none bg-transparent px-[24px] pr-[68px] text-[24px] text-[#1A2238] outline-none placeholder:text-[rgba(20,25,45,0.35)]"
+                      type={showDashboardPassword ? "text" : "password"}
+                      placeholder="Contrasena dashboard"
+                      value={dashboardPassword}
+                      onChange={(e) => setDashboardPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-[16px] top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-[#626B87] transition-colors hover:bg-[#EEF1F6] hover:text-[#1A2238]"
+                      aria-label={showDashboardPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                      aria-pressed={showDashboardPassword}
+                      onClick={() => setShowDashboardPassword((prev) => !prev)}
+                    >
+                      <PasswordIcon visible={showDashboardPassword} />
+                    </button>
+                  </div>
+
+                  <button
+                    className="mt-[18px] h-[74px] w-full rounded-full border-none bg-[#0B1230] text-[22px] font-medium text-white transition-colors hover:cursor-pointer hover:bg-[#121B42]"
+                    style={{ boxShadow: "0px 14px 26px rgba(0,0,0,0.28)" }}
+                    disabled={dashboardLoading}
+                    type="submit"
+                  >
+                    {dashboardLoading ? "Loading..." : "Entrar al dashboard"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="text-[18px] text-[#5E6785] transition-colors hover:text-[#121B42]"
+                    onClick={() => setDesktopStep("space")}
+                  >
+                    Volver
+                  </button>
+                </form>
               </>
             )}
           </section>
@@ -370,6 +485,69 @@ export default function LoginPage() {
                 </form>
               </>
             </div>
+          ) : mobileStep === "dashboard-login" ? (
+            <div className="mx-auto flex h-full w-full max-w-[420px] flex-col justify-center px-7 pb-8 pt-8 text-[#121633]">
+              <p className="mb-[14px] text-[36px] font-extrabold leading-[36px]" style={{ fontFamily: "var(--font-login-heading)" }}>
+                TAWA Co
+              </p>
+              <h2 className="mt-[10px] max-w-[260px] text-[39px] font-black leading-[58px]" style={{ fontFamily: "var(--font-login-heading)" }}>
+                Acceso dashboard
+              </h2>
+
+              <form onSubmit={handleDashboardLogin} className="mt-[52px] flex flex-col gap-[18px]" style={{ fontFamily: "var(--font-login-body)" }}>
+                {dashboardError ? <div className="rounded-xl bg-red-100 px-4 py-3 text-sm text-red-700">{dashboardError}</div> : null}
+
+                <input
+                  id="dashboard-email-mobile"
+                  name="dashboard-email-mobile"
+                  autoComplete="username"
+                  className="h-[66px] w-full rounded-full border-none bg-white px-[24px] text-[24px] text-[#1A2238] outline-none placeholder:text-[rgba(20,25,45,0.35)]"
+                  type="email"
+                  placeholder="Email dashboard"
+                  value={dashboardEmail}
+                  onChange={(e) => setDashboardEmail(e.target.value)}
+                />
+
+                <div className="relative h-[66px] w-full rounded-full bg-white">
+                  <input
+                    id="dashboard-password-mobile"
+                    name="dashboard-password-mobile"
+                    autoComplete="current-password"
+                    className="h-[66px] w-full rounded-full border-none bg-transparent px-[24px] pr-[68px] text-[24px] text-[#1A2238] outline-none placeholder:text-[rgba(20,25,45,0.35)]"
+                    type={showDashboardPassword ? "text" : "password"}
+                    placeholder="Contrasena dashboard"
+                    value={dashboardPassword}
+                    onChange={(e) => setDashboardPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-[16px] top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-[#626B87] transition-colors hover:bg-[#EEF1F6] hover:text-[#1A2238]"
+                    aria-label={showDashboardPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                    aria-pressed={showDashboardPassword}
+                    onClick={() => setShowDashboardPassword((prev) => !prev)}
+                  >
+                    <PasswordIcon visible={showDashboardPassword} />
+                  </button>
+                </div>
+
+                <button
+                  className="mt-[18px] h-[74px] w-full rounded-full border-none bg-[#0B1230] text-[22px] font-medium text-white"
+                  style={{ boxShadow: "0px 14px 26px rgba(0,0,0,0.28)" }}
+                  disabled={dashboardLoading}
+                  type="submit"
+                >
+                  {dashboardLoading ? "Loading..." : "Entrar al dashboard"}
+                </button>
+
+                <button
+                  type="button"
+                  className="text-[18px] text-[#5E6785]"
+                  onClick={() => setMobileStep("space")}
+                >
+                  Volver
+                </button>
+              </form>
+            </div>
           ) : (
             <div className="mx-auto flex h-full w-full max-w-[420px] flex-col justify-center px-7 pb-8 pt-8 text-[#121633]">
               <h2
@@ -385,7 +563,10 @@ export default function LoginPage() {
                     className="h-[62px] w-full rounded-full border-none bg-white text-center text-[20px] text-[#666] transition-colors hover:bg-[#4449CD26] active:bg-[#4449CD26]"
                     style={{ boxShadow: "inset 0px 0px 0px 1px rgba(15,20,40,0.06)" }}
                     type="button"
-                    onClick={() => router.push("/select-holding")}
+                    onClick={() => {
+                      setDashboardError("");
+                      setMobileStep("dashboard-login");
+                    }}
                   >
                     Dashboard TAWA Co
                   </button>
