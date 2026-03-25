@@ -1955,20 +1955,29 @@ export default function DashboardDemarcaPage() {
                 </div>
               ) : null}
 
-              <button
-                type="button"
-                className="mt-5 flex items-center gap-1.5 text-[12px] uppercase tracking-wide text-[#6D748A]"
-                style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
-                onClick={() => setMenuSectionCollapsed((prev) => !prev)}
-              >
-                <span>Menu</span>
-                <svg
-                  viewBox="0 0 20 20"
-                  className={`h-3 w-3 fill-current transition-transform ${menuSectionCollapsed ? "-rotate-90" : ""}`}
+              <div className="mt-5">
+                <p
+                  className="max-w-[180px] text-[28px] font-black leading-[1.08] tracking-[-0.02em] text-[#121633]"
+                  style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}
                 >
-                  <path d="M5 7l5 6 5-6H5z" />
-                </svg>
-              </button>
+                  Stay Sharp, Stay Productive! 🔥
+                </p>
+
+                <button
+                  type="button"
+                  className="mt-6 flex items-center gap-1.5 text-[12px] uppercase tracking-[0.32em] text-[#6D748A]"
+                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                  onClick={() => setMenuSectionCollapsed((prev) => !prev)}
+                >
+                  <span>Menu</span>
+                  <svg
+                    viewBox="0 0 20 20"
+                    className={`h-3 w-3 fill-current transition-transform ${menuSectionCollapsed ? "-rotate-90" : ""}`}
+                  >
+                    <path d="M5 7l5 6 5-6H5z" />
+                  </svg>
+                </button>
+              </div>
 
               {!menuSectionCollapsed ? (
               <div className="mt-3 space-y-1.5">
