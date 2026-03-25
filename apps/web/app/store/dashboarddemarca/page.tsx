@@ -684,8 +684,12 @@ export default function DashboardDemarcaPage() {
     try {
       const userRaw = localStorage.getItem("user");
       if (!userRaw) return "Nombre de usuario";
-      const parsed = JSON.parse(userRaw) as { fullName?: string };
-      return parsed.fullName?.trim() || "Nombre de usuario";
+      const parsed = JSON.parse(userRaw) as { fullName?: string; email?: string };
+      const fullName = String(parsed.fullName || "").trim();
+      if (fullName) return fullName;
+      const emailLocalPart = String(parsed.email || "").split("@")[0].trim();
+      if (!emailLocalPart) return "Nombre de usuario";
+      return emailLocalPart.charAt(0).toUpperCase() + emailLocalPart.slice(1).toLowerCase();
     } catch {
       return "Nombre de usuario";
     }
