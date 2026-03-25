@@ -694,6 +694,17 @@ export default function DashboardDemarcaPage() {
       return "Nombre de usuario";
     }
   });
+  const [userEmail] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const userRaw = localStorage.getItem("user");
+      if (!userRaw) return "";
+      const parsed = JSON.parse(userRaw) as { email?: string };
+      return String(parsed.email || "").trim().toLowerCase();
+    } catch {
+      return "";
+    }
+  });
   const [storeName] = useState(() => {
     if (typeof window === "undefined") return "demarca.";
     try {
@@ -707,6 +718,7 @@ export default function DashboardDemarcaPage() {
       return "demarca.";
     }
   });
+  const isTawaDashboard = userEmail.endsWith("@tawaco.local");
   const [now, setNow] = useState<Date>(() => new Date());
   const warehouseLayoutByCode = useMemo(
     () => new Map(warehouseLayout.map((entry) => [entry.code, entry])),
@@ -1905,57 +1917,61 @@ export default function DashboardDemarcaPage() {
 
           {!sidebarCollapsed ? (
             <div className="h-[calc(100%-77px)] overflow-y-auto px-5 pb-6 pt-3">
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  className={`flex items-center gap-1.5 text-[12px] uppercase tracking-wide ${
-                    showStoreProfile ? "text-[#7075FF]" : "text-[#6D748A]"
-                  }`}
-                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
-                  onClick={() => setStoreSectionCollapsed((prev) => !prev)}
-                >
-                  <span>TIENDA</span>
-                  <svg
-                    viewBox="0 0 20 20"
-                    className={`h-3 w-3 fill-current transition-transform ${storeSectionCollapsed ? "-rotate-90" : ""}`}
-                  >
-                    <path d="M5 7l5 6 5-6H5z" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className="text-[12px] text-[#1C233F] hover:underline"
-                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
-                  onClick={() => {
-                    setShowStoreProfile(true);
-                    setProfileTab("general");
-                  }}
-                >
-                  ver mas
-                </button>
-              </div>
-              {!storeSectionCollapsed ? (
-                <div className="mt-2">
-                  {isRemoteLogo ? (
-                    <img
-                      src={currentLogoSrc}
-                      alt={profile.name || storeName.replace(/\.$/, "") || "demarca"}
-                      className="h-auto w-[176px] object-contain"
-                    />
-                  ) : (
-                    <Image
-                      src={currentLogoSrc}
-                      alt={profile.name || storeName.replace(/\.$/, "") || "demarca"}
-                      width={176}
-                      height={46}
-                      className="h-auto w-[176px] object-contain"
-                      priority
-                    />
-                  )}
-                </div>
+              {!isTawaDashboard ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      className={`flex items-center gap-1.5 text-[12px] uppercase tracking-wide ${
+                        showStoreProfile ? "text-[#7075FF]" : "text-[#6D748A]"
+                      }`}
+                      style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                      onClick={() => setStoreSectionCollapsed((prev) => !prev)}
+                    >
+                      <span>TIENDA</span>
+                      <svg
+                        viewBox="0 0 20 20"
+                        className={`h-3 w-3 fill-current transition-transform ${storeSectionCollapsed ? "-rotate-90" : ""}`}
+                      >
+                        <path d="M5 7l5 6 5-6H5z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[12px] text-[#1C233F] hover:underline"
+                      style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                      onClick={() => {
+                        setShowStoreProfile(true);
+                        setProfileTab("general");
+                      }}
+                    >
+                      ver mas
+                    </button>
+                  </div>
+                  {!storeSectionCollapsed ? (
+                    <div className="mt-2">
+                      {isRemoteLogo ? (
+                        <img
+                          src={currentLogoSrc}
+                          alt={profile.name || storeName.replace(/\.$/, "") || "demarca"}
+                          className="h-auto w-[176px] object-contain"
+                        />
+                      ) : (
+                        <Image
+                          src={currentLogoSrc}
+                          alt={profile.name || storeName.replace(/\.$/, "") || "demarca"}
+                          width={176}
+                          height={46}
+                          className="h-auto w-[176px] object-contain"
+                          priority
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
-              <div className="mt-5">
+              <div className={isTawaDashboard ? "mt-2" : "mt-5"}>
                 <p
                   className="max-w-[180px] text-[28px] font-black leading-[1.08] tracking-[-0.02em] text-[#121633]"
                   style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}
