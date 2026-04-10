@@ -40,6 +40,27 @@ type PersonalProfile = {
   locale: string;
 };
 
+type StaffMemberForm = {
+  avatarUrl: string;
+  fullName: string;
+  role: string;
+  area: string;
+  tawaEmail: string;
+  personalEmail: string;
+  password: string;
+  phone: string;
+  shift: string;
+  location: string;
+  accessLevel: string;
+  status: string;
+  notes: string;
+};
+
+type StaffMemberRecord = StaffMemberForm & {
+  id: string;
+  createdAt: string;
+};
+
 type ProfileTabKey = "general" | "paises" | "monedas" | "almacenes" | "marketplaces" | "facturacion";
 type WarehouseMapBlock = {
   key: string;
@@ -327,6 +348,7 @@ const menu: MenuItem[] = [
   { key: "scanner-transferencias", label: "Transferencias", indent: 2 },
   { key: "productos", label: "Productos", path: "/store/products", indent: 1 },
   { key: "almacenes", label: "Almacenes", path: "/store/inventory", isMain: true },
+  { key: "tiendas", label: "Tiendas", emptyText: "Tiendas aún está vacío.", isMain: true },
   { key: "almacenes-lista", label: "Lista de Almacenes", path: "/store/inventory", indent: 1 },
   { key: "es-seg", label: "ES-SEG", emptyText: "ES-SEG aun esta vacio.", indent: 2 },
   { key: "es-seg-info", label: "Información del almacén", emptyText: "Información del almacén aun esta vacía.", indent: 3 },
@@ -349,9 +371,12 @@ const menu: MenuItem[] = [
   { key: "3pl", label: "3PL", path: "/store/3pl", isMain: true },
   { key: "finanzas", label: "Finanzas", path: "/store/payouts", isMain: true },
   { key: "tareas", label: "Tareas", path: "/store/tasks", isMain: true },
-  { key: "chat", label: "Chat", path: "/store/chat", isMain: true },
+  { key: "amigos", label: "Amigos", emptyText: "Amigos aún está vacío.", isMain: true },
+  { key: "calendario", label: "Calendario", emptyText: "Calendario aún está vacío.", isMain: true },
+  { key: "chat", label: "Chat", path: "/store/chat", isMain: true, subLabel: "preview" },
   { key: "configuracion", label: "Configuración", path: "/store/settings", isMain: true, isGroup: true },
   { key: "editar-perfil", label: "Editar perfil", indent: 1 },
+  { key: "agregar-personal", label: "Agregar personal", indent: 1 },
   { key: "analytics", label: "Analytics", path: "/store/analytics", isMain: true },
   { key: "soporte", label: "Soporte", path: "/store/support", isMain: true },
   { key: "audit", label: "Audit", path: "/store/audit", isMain: true },
@@ -365,22 +390,18 @@ const PERSONAL_AVATAR_OPTIONS = [
   { key: "chica01", label: "chica01", src: "/branding/chica01.png" },
 ] as const;
 
-const DASHBOARD_CHAT_PREVIEW = [
-  {
-    id: "incoming",
-    author: "Albert",
-    text: "Ya dejé listos los cambios del catálogo para la tarde.",
-    time: "12:58",
-    outgoing: false,
-  },
-  {
-    id: "outgoing",
-    author: "Steph TAWA",
-    text: "Perfecto, súbelo y luego revisamos el feed de Shopify juntos.",
-    time: "13:00",
-    outgoing: true,
-  },
-] as const;
+const CHAT_EMOJI_OPTIONS = ["😀", "😊", "😍", "😂", "🙏", "🔥", "💜", "👍"];
+const CHAT_PREVIEW_STORAGE_KEY = "tawa-chat-preview";
+const STAFF_STORAGE_KEY = "tawa-staff-members";
+const DEFAULT_PERSONAL_PROFILE: PersonalProfile = {
+  avatarUrl: "/branding/steph01.png",
+  fullName: "Stephany Pizan",
+  gender: "Femenino",
+  emails: ["stpizan@gmail.com", "stephpizandesigner@gmail.com", "stephany_303@hotmail.com"],
+  phones: ["611 19 13 24", "987 755 063"],
+  birthDate: "4 de octubre de 1993",
+  locale: "Español (Latinoamérica)",
+};
 
 const WAREHOUSE_MAP_BLOCKS: WarehouseMapBlock[] = [
   { key: "A", label: "BLOQUE A", itemCount: 24, rows: [1], x: 19, y: 24, w: 11, h: 9 },
@@ -544,12 +565,18 @@ function menuIcon(key: string) {
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h16l-1.5 12h-13zM9 7V5a3 3 0 0 1 6 0v2" /></svg>;
     case "almacenes":
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 11l9-7 9 7v9H3z" /><path d="M9 21v-6h6v6" /></svg>;
+    case "tiendas":
+      return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 8h16l-1 11H5z" /><path d="M7 8V6h10v2" /><path d="M9 12h6" /></svg>;
     case "3pl":
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12h12M8 5l5 7-5 7" /><path d="M16 7h6M16 17h6" /></svg>;
     case "finanzas":
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18M3 12h18M3 18h18" /><circle cx="8" cy="12" r="3" /></svg>;
     case "tareas":
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 11l2 2 4-4" /><rect x="3" y="4" width="18" height="16" rx="2" /></svg>;
+    case "amigos":
+      return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" /><circle cx="9.5" cy="8" r="3.5" /><path d="M20 21v-2a4 4 0 0 0-3-3.87" /><path d="M14 4.13a3.5 3.5 0 0 1 0 6.74" /></svg>;
+    case "calendario":
+      return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 3v4M17 3v4M4 9h16" /><rect x="4" y="5" width="16" height="16" rx="2" /></svg>;
     case "chat":
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>;
     case "configuracion":
@@ -584,6 +611,14 @@ function personalProfileIcon(key: string) {
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 3v4M17 3v4M4 9h16" /><rect x="4" y="5" width="16" height="15" rx="2" /></svg>;
     case "locale":
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></svg>;
+    case "role":
+      return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3l7 4v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V7z" /><path d="M9 12l2 2 4-4" /></svg>;
+    case "area":
+      return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7h18" /><path d="M6 7V5h12v2" /><rect x="4" y="7" width="16" height="12" rx="2" /><path d="M9 12h6" /></svg>;
+    case "status":
+      return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="8" /><path d="M9 12l2 2 4-4" /></svg>;
+    case "notes":
+      return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 4h10l3 3v13H7z" /><path d="M14 4v4h4" /><path d="M10 12h6M10 16h6" /></svg>;
     default:
       return <svg viewBox="0 0 24 24" className={base} fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>;
   }
@@ -726,6 +761,7 @@ export default function DashboardDemarcaPage() {
   });
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const colorPickerRef = useRef<HTMLInputElement | null>(null);
+  const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const hasSavedWarehousesRef = useRef(false);
   const hasSavedCanalesRef = useRef(false);
   const [profile, setProfile] = useState<StoreProfile>({
@@ -737,62 +773,53 @@ export default function DashboardDemarcaPage() {
     marketplaces: ["Shopify"],
     warehouses: ["ES-SEG"],
   });
-  const [personalProfile, setPersonalProfile] = useState<PersonalProfile>(() => {
-    if (typeof window === "undefined") {
-      return {
-        avatarUrl: "/branding/steph01.png",
-        fullName: "Stephany Pizan",
-        gender: "Femenino",
-        emails: ["stpizan@gmail.com", "stephpizandesigner@gmail.com", "stephany_303@hotmail.com"],
-        phones: ["611 19 13 24", "987 755 063"],
-        birthDate: "4 de octubre de 1993",
-        locale: "Español (Latinoamérica)",
-      };
-    }
-
-    try {
-      const savedRaw = localStorage.getItem("tawa-personal-profile");
-      if (savedRaw) {
-        const saved = JSON.parse(savedRaw) as Partial<PersonalProfile>;
-        return {
-          avatarUrl: String(saved.avatarUrl || "/branding/steph01.png"),
-          fullName: String(saved.fullName || "Stephany Pizan"),
-          gender: String(saved.gender || "Femenino"),
-          emails: Array.isArray(saved.emails) && saved.emails.length ? saved.emails.map((item) => String(item || "")) : ["stpizan@gmail.com", "stephpizandesigner@gmail.com", "stephany_303@hotmail.com"],
-          phones: Array.isArray(saved.phones) && saved.phones.length ? saved.phones.map((item) => String(item || "")) : ["611 19 13 24", "987 755 063"],
-          birthDate: String(saved.birthDate || "4 de octubre de 1993"),
-          locale: String(saved.locale || "Español (Latinoamérica)"),
-        };
-      }
-
-      const userRaw = localStorage.getItem("user");
-      const parsed = userRaw ? (JSON.parse(userRaw) as { fullName?: string; email?: string; preferredLocale?: string }) : {};
-      const fallbackEmail = String(parsed.email || "").trim();
-      return {
-        avatarUrl: "/branding/steph01.png",
-        fullName: String(parsed.fullName || "").trim() || "Stephany Pizan",
-        gender: "Femenino",
-        emails: fallbackEmail
-          ? [fallbackEmail, "stephpizandesigner@gmail.com", "stephany_303@hotmail.com"]
-          : ["stpizan@gmail.com", "stephpizandesigner@gmail.com", "stephany_303@hotmail.com"],
-        phones: ["611 19 13 24", "987 755 063"],
-        birthDate: "4 de octubre de 1993",
-        locale: String(parsed.preferredLocale || "").toLowerCase() === "en" ? "English" : "Español (Latinoamérica)",
-      };
-    } catch {
-      return {
-        avatarUrl: "/branding/steph01.png",
-        fullName: "Stephany Pizan",
-        gender: "Femenino",
-        emails: ["stpizan@gmail.com", "stephpizandesigner@gmail.com", "stephany_303@hotmail.com"],
-        phones: ["611 19 13 24", "987 755 063"],
-        birthDate: "4 de octubre de 1993",
-        locale: "Español (Latinoamérica)",
-      };
-    }
-  });
+  const [personalProfile, setPersonalProfile] = useState<PersonalProfile>(DEFAULT_PERSONAL_PROFILE);
   const [personalProfileSaveOk, setPersonalProfileSaveOk] = useState("");
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [staffForm, setStaffForm] = useState<StaffMemberForm>({
+    avatarUrl: "/branding/steph01.png",
+    fullName: "",
+    role: "",
+    area: "",
+    tawaEmail: "",
+    personalEmail: "",
+    password: "",
+    phone: "",
+    shift: "Mañana",
+    location: "Tawa Co",
+    accessLevel: "Operativo",
+    status: "Activo",
+    notes: "",
+  });
+  const [staffMembers, setStaffMembers] = useState<StaffMemberRecord[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(STAFF_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as StaffMemberRecord[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [staffSaveOk, setStaffSaveOk] = useState("");
+  const [staffError, setStaffError] = useState("");
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [staffEditorForm, setStaffEditorForm] = useState<StaffMemberForm | null>(null);
+  const [staffEditorError, setStaffEditorError] = useState("");
+  const [staffEditorSaveOk, setStaffEditorSaveOk] = useState("");
+  const [showEditorPassword, setShowEditorPassword] = useState(false);
+  const [showCalendarCreateMenu, setShowCalendarCreateMenu] = useState(false);
+  const [showCalendarEventModal, setShowCalendarEventModal] = useState(false);
+  const [calendarCreateTab, setCalendarCreateTab] = useState<"evento" | "tarea" | "agenda">("evento");
+  const [calendarEventTitle, setCalendarEventTitle] = useState("");
+  const [showCalendarGuestsMenu, setShowCalendarGuestsMenu] = useState(false);
+  const [calendarGuestIds, setCalendarGuestIds] = useState<string[]>([]);
+  const [chatPreviewInput, setChatPreviewInput] = useState("");
+  const [chatPreviewMessage, setChatPreviewMessage] = useState("Hola, ya dejé listo el chat.");
+  const [chatPreviewTime, setChatPreviewTime] = useState("Ahora");
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [chatAttachedFileName, setChatAttachedFileName] = useState("");
   const [storeName] = useState(() => {
     if (typeof window === "undefined") return "demarca.";
     try {
@@ -808,6 +835,52 @@ export default function DashboardDemarcaPage() {
   });
   const isTawaDashboard = true;
   const [now, setNow] = useState<Date>(() => new Date());
+  const [calendarFocusDate, setCalendarFocusDate] = useState<Date>(() => new Date());
+  const chatOnlineUsers = useMemo(
+    () => [
+      {
+        name: personalProfile.fullName || "Steph",
+        avatarUrl: personalProfile.avatarUrl,
+        online: true,
+        isSelf: true,
+        isTyping: false,
+      },
+    ],
+    [personalProfile.fullName, personalProfile.avatarUrl]
+  );
+  const typingPreviewUser = useMemo(
+    () => chatOnlineUsers.find((user) => user.online && !user.isSelf && user.isTyping) || null,
+    [chatOnlineUsers]
+  );
+  const selectedStaffMember = useMemo(
+    () => staffMembers.find((member) => member.id === selectedStaffId) || null,
+    [staffMembers, selectedStaffId]
+  );
+  const calendarWeekStart = useMemo(() => {
+    const next = new Date(calendarFocusDate);
+    next.setHours(0, 0, 0, 0);
+    next.setDate(next.getDate() - next.getDay());
+    return next;
+  }, [calendarFocusDate]);
+  const calendarWeekDays = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, idx) => {
+        const date = new Date(calendarWeekStart);
+        date.setDate(calendarWeekStart.getDate() + idx);
+        return date;
+      }),
+    [calendarWeekStart]
+  );
+  const calendarMonthLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("es-ES", {
+        month: "long",
+        year: "numeric",
+      })
+        .format(calendarFocusDate)
+        .replace(/^\w/, (match) => match.toUpperCase()),
+    [calendarFocusDate]
+  );
   const warehouseLayoutByCode = useMemo(
     () => new Map(warehouseLayout.map((entry) => [entry.code, entry])),
     [warehouseLayout]
@@ -889,6 +962,123 @@ export default function DashboardDemarcaPage() {
         ? "border-[#121633] bg-white text-[#1B2140] shadow-[0_6px_14px_rgba(18,22,51,0.18)]"
         : "border-[#E3E7EE] bg-[#EEF1F6] text-[#6A738B] hover:border-[#CBD2DF] hover:bg-white"
     }`;
+  }
+
+  function persistChatPreview(body: string) {
+    const trimmed = body.trim();
+    if (!trimmed) return;
+    const createdAt = new Date().toISOString();
+    const previewBody = trimmed.length > 78 ? `${trimmed.slice(0, 75)}...` : trimmed;
+    setChatPreviewMessage(previewBody);
+    setChatPreviewTime(
+      new Intl.DateTimeFormat("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(createdAt))
+    );
+    try {
+      localStorage.setItem(
+        CHAT_PREVIEW_STORAGE_KEY,
+        JSON.stringify({
+          body: previewBody,
+          createdAt,
+        })
+      );
+    } catch {
+      // Best effort only.
+    }
+  }
+
+  function updateStaffForm<K extends keyof StaffMemberForm>(field: K, value: StaffMemberForm[K]) {
+    setStaffForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function saveStaffMember() {
+    const requiredFields: Array<keyof StaffMemberForm> = ["fullName", "role", "area", "tawaEmail", "personalEmail", "password", "phone"];
+    const hasMissingField = requiredFields.some((field) => !String(staffForm[field] || "").trim());
+    if (hasMissingField) {
+      setStaffError("Completa nombre, rol, área, correo Tawa, correo personal, contraseña y teléfono.");
+      setStaffSaveOk("");
+      return;
+    }
+
+    const nextMember: StaffMemberRecord = {
+      ...staffForm,
+      id: `staff-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+
+    setStaffMembers((prev) => [nextMember, ...prev]);
+    setStaffForm({
+      avatarUrl: "/branding/steph01.png",
+      fullName: "",
+      role: "",
+      area: "",
+      tawaEmail: "",
+      personalEmail: "",
+      password: "",
+      phone: "",
+      shift: "Mañana",
+      location: "Tawa Co",
+      accessLevel: "Operativo",
+      status: "Activo",
+      notes: "",
+    });
+    setStaffError("");
+    setStaffSaveOk("Personal agregado correctamente.");
+    window.setTimeout(() => setStaffSaveOk(""), 2200);
+  }
+
+  function openStaffProfile(member: StaffMemberRecord) {
+    setSelectedStaffId(member.id);
+    setStaffEditorForm({
+      avatarUrl: member.avatarUrl,
+      fullName: member.fullName,
+      role: member.role,
+      area: member.area,
+      tawaEmail: member.tawaEmail,
+      personalEmail: member.personalEmail,
+      password: member.password,
+      phone: member.phone,
+      shift: member.shift,
+      location: member.location,
+      accessLevel: member.accessLevel,
+      status: member.status,
+      notes: member.notes,
+    });
+    setStaffEditorError("");
+    setStaffEditorSaveOk("");
+    setShowEditorPassword(false);
+    setActiveKey("amigos-ficha");
+  }
+
+  function updateStaffEditorField<K extends keyof StaffMemberForm>(field: K, value: StaffMemberForm[K]) {
+    setStaffEditorForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+  }
+
+  function saveStaffEditor() {
+    if (!selectedStaffId || !staffEditorForm) return;
+    const requiredFields: Array<keyof StaffMemberForm> = ["fullName", "role", "area", "tawaEmail", "personalEmail", "password", "phone"];
+    const hasMissingField = requiredFields.some((field) => !String(staffEditorForm[field] || "").trim());
+    if (hasMissingField) {
+      setStaffEditorError("Completa todos los campos clave antes de guardar.");
+      setStaffEditorSaveOk("");
+      return;
+    }
+    setStaffMembers((prev) => prev.map((member) => (member.id === selectedStaffId ? { ...member, ...staffEditorForm } : member)));
+    setStaffEditorError("");
+    setStaffEditorSaveOk("Ficha actualizada.");
+    window.setTimeout(() => setStaffEditorSaveOk(""), 2200);
+  }
+
+  function deleteSelectedStaff() {
+    if (!selectedStaffId) return;
+    setStaffMembers((prev) => prev.filter((member) => member.id !== selectedStaffId));
+    setSelectedStaffId("");
+    setStaffEditorForm(null);
+    setStaffEditorError("");
+    setStaffEditorSaveOk("");
+    setActiveKey("amigos");
   }
 
   useEffect(() => {
@@ -1273,6 +1463,82 @@ export default function DashboardDemarcaPage() {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const savedRaw = localStorage.getItem("tawa-personal-profile");
+      if (savedRaw) {
+        const saved = JSON.parse(savedRaw) as Partial<PersonalProfile>;
+        setPersonalProfile({
+          avatarUrl: String(saved.avatarUrl || DEFAULT_PERSONAL_PROFILE.avatarUrl),
+          fullName: String(saved.fullName || DEFAULT_PERSONAL_PROFILE.fullName),
+          gender: String(saved.gender || DEFAULT_PERSONAL_PROFILE.gender),
+          emails:
+            Array.isArray(saved.emails) && saved.emails.length
+              ? saved.emails.map((item) => String(item || ""))
+              : DEFAULT_PERSONAL_PROFILE.emails,
+          phones:
+            Array.isArray(saved.phones) && saved.phones.length
+              ? saved.phones.map((item) => String(item || ""))
+              : DEFAULT_PERSONAL_PROFILE.phones,
+          birthDate: String(saved.birthDate || DEFAULT_PERSONAL_PROFILE.birthDate),
+          locale: String(saved.locale || DEFAULT_PERSONAL_PROFILE.locale),
+        });
+      } else {
+        const userRaw = localStorage.getItem("user");
+        const parsed = userRaw ? (JSON.parse(userRaw) as { fullName?: string; email?: string; preferredLocale?: string }) : {};
+        const fallbackEmail = String(parsed.email || "").trim();
+        setPersonalProfile({
+          avatarUrl: DEFAULT_PERSONAL_PROFILE.avatarUrl,
+          fullName: String(parsed.fullName || "").trim() || DEFAULT_PERSONAL_PROFILE.fullName,
+          gender: DEFAULT_PERSONAL_PROFILE.gender,
+          emails: fallbackEmail
+            ? [fallbackEmail, "stephpizandesigner@gmail.com", "stephany_303@hotmail.com"]
+            : DEFAULT_PERSONAL_PROFILE.emails,
+          phones: DEFAULT_PERSONAL_PROFILE.phones,
+          birthDate: DEFAULT_PERSONAL_PROFILE.birthDate,
+          locale: String(parsed.preferredLocale || "").toLowerCase() === "en" ? "English" : DEFAULT_PERSONAL_PROFILE.locale,
+        });
+      }
+    } catch {
+      setPersonalProfile(DEFAULT_PERSONAL_PROFILE);
+    }
+
+    const syncChatPreview = () => {
+      try {
+        const raw = localStorage.getItem(CHAT_PREVIEW_STORAGE_KEY);
+        const parsed = raw ? (JSON.parse(raw) as { body?: string; createdAt?: string }) : {};
+        const nextBody = String(parsed.body || "").trim() || "Hola, ya dejé listo el chat.";
+        const nextTime = parsed.createdAt
+          ? new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(new Date(parsed.createdAt))
+          : "Ahora";
+        setChatPreviewMessage(nextBody);
+        setChatPreviewTime(nextTime);
+      } catch {
+        setChatPreviewMessage("Hola, ya dejé listo el chat.");
+        setChatPreviewTime("Ahora");
+      }
+    };
+
+    syncChatPreview();
+    window.addEventListener("focus", syncChatPreview);
+    window.addEventListener("storage", syncChatPreview);
+    return () => {
+      window.removeEventListener("focus", syncChatPreview);
+      window.removeEventListener("storage", syncChatPreview);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembers));
+    } catch {
+      // Best effort only.
+    }
+  }, [staffMembers]);
 
   const todayLabel = (() => {
     const raw = new Intl.DateTimeFormat("es-ES", {
@@ -2039,6 +2305,200 @@ export default function DashboardDemarcaPage() {
                   const isCollapsed = !!collapsedSections[item.key];
                   return (
                     <Fragment key={item.key}>
+                      {item.key === "chat" ? (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setChatUnreadCount(0);
+                            activateDashboardMenu(item.key);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setChatUnreadCount(0);
+                              activateDashboardMenu(item.key);
+                            }
+                          }}
+                          className="w-full cursor-pointer text-left transition"
+                          style={{
+                            fontFamily: "var(--font-dashboarddemarca-body)",
+                            paddingLeft: `${16 + indent}px`,
+                          }}
+                        >
+                          <span className="flex min-w-0 flex-col">
+                            <span className="-ml-4 w-[280px] rounded-[28px] bg-[#F3F6FA] px-4 py-4 text-[#121633] shadow-[0_8px_22px_rgba(15,23,42,0.06)]">
+                              <span className="flex items-start justify-between gap-3">
+                                <span className="flex items-center gap-3">
+                                  <span className="flex h-11 w-11 items-center justify-center rounded-full border border-[#D8DEE8] bg-white text-[#1B2140]">
+                                    {menuIcon("chat")}
+                                  </span>
+                                  <span className="text-[18px] leading-none text-[#11162E]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                    Chat
+                                  </span>
+                                </span>
+                                {chatUnreadCount > 0 ? (
+                                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#B8ADF7] text-[15px] text-white" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                    {chatUnreadCount}
+                                  </span>
+                                ) : (
+                                  <span className="h-10 w-10" />
+                                )}
+                              </span>
+
+                              <span className="mt-4 flex items-center justify-between gap-3">
+                                {typingPreviewUser ? (
+                                  <span
+                                    className="truncate text-[11px] text-[#30364B]"
+                                    style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                  >
+                                    {typingPreviewUser.name} está escribiendo...
+                                  </span>
+                                ) : (
+                                  <span />
+                                )}
+                                <span className="flex -space-x-1.5">
+                                  {chatOnlineUsers
+                                    .filter((user) => user.online)
+                                    .map((user) => (
+                                      <span key={`${user.name}-${user.avatarUrl}`} className="relative inline-flex">
+                                        <Image
+                                          src={user.avatarUrl}
+                                          alt={user.name}
+                                          width={26}
+                                          height={26}
+                                          className="h-[26px] w-[26px] rounded-full border-2 border-[#F3F6FA] object-cover"
+                                        />
+                                        <span className="absolute -bottom-0.5 -left-0.5 h-2.5 w-2.5 rounded-full border border-[#F3F6FA] bg-[#22C55E]" />
+                                      </span>
+                                    ))}
+                                </span>
+                              </span>
+
+                              <span className="mt-4 flex flex-col gap-2">
+                                <span className="mr-[32px] rounded-[22px] bg-white px-4 py-3 shadow-[0_4px_12px_rgba(15,23,42,0.04)]">
+                                  <span className="block text-[9px] uppercase tracking-[0.08em] text-[#7A8297]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                    warehouseDEMARCA
+                                  </span>
+                                  <span
+                                    className="mt-1 block text-[10px] leading-[1.35] text-[#1C2138]"
+                                    style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                  >
+                                    Inventario actualizado. Ya está todo listo en almacén.
+                                  </span>
+                                </span>
+
+                                <span className="ml-[28px] rounded-[24px] bg-[#F6B6E8] px-4 py-3">
+                                  <span className="block text-[9px] uppercase tracking-[0.08em] text-[#7C4D77]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                    Admin DEMARCA
+                                  </span>
+                                  <span
+                                    className="mt-1 block text-[10px] leading-[1.35] text-[#1C2138]"
+                                    style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                  >
+                                    {chatPreviewMessage}
+                                  </span>
+                                  <span className="mt-2 block text-right text-[10px] text-[#2A3045]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                    {chatPreviewTime} ✓✓
+                                  </span>
+                                </span>
+                              </span>
+
+                              <span className="mt-3 flex items-center gap-2">
+                                <span className="flex h-[38px] min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-3 shadow-[0_4px_12px_rgba(15,23,42,0.04)]">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowEmojiPicker((prev) => !prev);
+                                    }}
+                                    className="text-[13px] text-[#A2A8B8]"
+                                  >
+                                    ☺
+                                  </button>
+                                  <input
+                                    value={chatPreviewInput}
+                                    onChange={(e) => setChatPreviewInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      e.stopPropagation();
+                                      if (e.key !== "Enter") return;
+                                      e.preventDefault();
+                                      const nextMessage = chatPreviewInput.trim();
+                                      if (!nextMessage) return;
+                                      persistChatPreview(nextMessage);
+                                      setChatPreviewInput("");
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    placeholder="Escribe tu mensaje"
+                                    className="min-w-0 flex-1 bg-transparent text-[10px] text-[#344054] outline-none placeholder:text-[#98A0B3]"
+                                    style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      chatAttachmentInputRef.current?.click();
+                                    }}
+                                    className="text-[13px] text-[#A2A8B8]"
+                                  >
+                                    📎
+                                  </button>
+                                  <input
+                                    ref={chatAttachmentInputRef}
+                                    type="file"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      const file = e.target.files?.[0];
+                                      setChatAttachedFileName(file ? file.name : "");
+                                      if (e.target) e.target.value = "";
+                                    }}
+                                  />
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const nextMessage = chatPreviewInput.trim();
+                                    if (!nextMessage) return;
+                                    persistChatPreview(nextMessage);
+                                    setChatPreviewInput("");
+                                  }}
+                                  className="inline-flex h-[38px] w-[38px] items-center justify-center rounded-full bg-[#B8ADF7] text-[12px] text-white shadow-[0_8px_18px_rgba(184,173,247,0.35)]"
+                                >
+                                  ➤
+                                </button>
+                              </span>
+                              {showEmojiPicker ? (
+                                <span className="mt-2 flex flex-wrap gap-1.5 rounded-[18px] bg-white px-3 py-2 shadow-[0_4px_12px_rgba(15,23,42,0.04)]">
+                                  {CHAT_EMOJI_OPTIONS.map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setChatPreviewInput((prev) => `${prev}${emoji}`);
+                                        setShowEmojiPicker(false);
+                                      }}
+                                      className="text-[14px]"
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </span>
+                              ) : null}
+                              {chatAttachedFileName ? (
+                                <span
+                                  className="mt-2 block truncate text-[10px] text-[#667085]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                >
+                                  Archivo adjunto: {chatAttachedFileName}
+                                </span>
+                              ) : null}
+                            </span>
+                          </span>
+                        </div>
+                      ) : (
                       <button
                         type="button"
                         onClick={() => {
@@ -2059,8 +2519,10 @@ export default function DashboardDemarcaPage() {
                         }
                         activateDashboardMenu(item.key);
                       }}
-                        className={`w-full rounded-full px-4 py-2 text-left transition ${
-                          item.isMain ? "text-[18px]" : "text-[13px]"
+                        className={`w-full text-left transition ${
+                          item.isMain
+                            ? "rounded-full px-4 py-2 text-[18px]"
+                            : "rounded-full px-4 py-2 text-[13px]"
                         } ${
                           active
                             ? "bg-[#0B1230] text-white"
@@ -2108,6 +2570,7 @@ export default function DashboardDemarcaPage() {
                           ) : null}
                         </span>
                       </button>
+                      )}
                       {item.key === "almacenes-lista" && !isCollapsed
                         ? warehouseRows
                             .filter((row) => isVisibleWarehouseLabel(row.label))
@@ -3822,103 +4285,6 @@ export default function DashboardDemarcaPage() {
                   </div>
                 </div>
               </div>
-            ) : activeKey === "dashboard" ? (
-              <div className="h-full">
-                <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#F6F7F9]">
-                  <div className="px-8 pt-8">
-                    <div className="mx-auto max-w-[980px]">
-                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
-                        Dashboard
-                      </div>
-                      <h2 className="mt-2 text-[24px] leading-none text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
-                        Chat
-                      </h2>
-                    </div>
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
-                    <div className="mx-auto max-w-[980px]">
-                      <div className="max-w-[420px] rounded-[34px] bg-[#EEF1F6] p-5 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#1B2140] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
-                              {menuIcon("chat")}
-                            </div>
-                            <div className="text-[21px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
-                              Chat
-                            </div>
-                          </div>
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#B8ADF7] text-[18px] text-white" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
-                            10
-                          </div>
-                        </div>
-
-                        <div className="mt-5 flex items-center justify-between">
-                          <div className="text-[15px] text-[#3E455C]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
-                            Albert is typing...
-                          </div>
-                          <div className="flex -space-x-2">
-                            {["/branding/steph01.png", "/branding/ale01.png", "/branding/katy01.png"].map((src) => (
-                              <Image
-                                key={src}
-                                src={src}
-                                alt="Miembro del chat"
-                                width={34}
-                                height={34}
-                                className="h-[34px] w-[34px] rounded-full border-2 border-[#EEF1F6] object-cover"
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="mt-5 space-y-3">
-                          {DASHBOARD_CHAT_PREVIEW.map((message) => (
-                            <div
-                              key={message.id}
-                              className={`max-w-[84%] rounded-[24px] px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.04)] ${
-                                message.outgoing ? "ml-auto bg-[#F0B6E8] text-[#1B2140]" : "bg-white text-[#1B2140]"
-                              }`}
-                            >
-                              <div
-                                className="text-[14px] leading-[1.5]"
-                                style={{
-                                  fontFamily: "var(--font-dashboarddemarca-body)",
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                  overflow: "hidden",
-                                }}
-                              >
-                                {message.text}
-                              </div>
-                              <div className="mt-2 text-right text-[12px] text-[#667085]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
-                                {message.time}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="mt-5 flex items-center gap-3">
-                          <div className="flex h-[54px] flex-1 items-center rounded-full bg-white px-5 text-[15px] text-[#98A0B3]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
-                            Type your message...
-                          </div>
-                          <button
-                            type="button"
-                            className="flex h-[54px] w-[54px] items-center justify-center rounded-full bg-[#B8ADF7] text-white shadow-[0_8px_18px_rgba(184,173,247,0.38)]"
-                            onClick={() => router.push("/store/chat")}
-                            aria-label="Abrir chat"
-                          >
-                            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M22 2 11 13" />
-                              <path d="m22 2-7 20-4-9-9-4Z" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             ) : activeKey === "editar-perfil" ? (
               <div className="h-full">
                 <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#F6F7F9]">
@@ -4217,6 +4583,425 @@ export default function DashboardDemarcaPage() {
                     </div>
                   </div>
                 ) : null}
+              </div>
+            ) : activeKey === "agregar-personal" ? (
+              <div className="h-full">
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#F6F7F9]">
+                  <div className="px-8 pt-8">
+                    <div className="mx-auto flex max-w-[1040px] items-start justify-between rounded-[28px] bg-white px-7 py-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-[0.24em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Configuración
+                        </div>
+                        <h2 className="mt-2 text-[22px] leading-none text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                          Agregar personal
+                        </h2>
+                        <p className="mt-3 max-w-[580px] text-[14px] leading-[1.55] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Registra nuevos miembros del equipo con sus datos operativos, nivel de acceso y ubicación para tener la estructura interna bien organizada.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 pl-6">
+                        {[
+                          { label: "Total equipo", value: String(staffMembers.length) },
+                          { label: "Activos", value: String(staffMembers.filter((item) => item.status === "Activo").length) },
+                          { label: "Supervisión", value: String(staffMembers.filter((item) => item.accessLevel === "Supervisor").length) },
+                        ].map((item) => (
+                          <div key={item.label} className="min-w-[110px] rounded-[22px] bg-[#F5F6F8] px-4 py-3 text-center">
+                            <div className="text-[11px] uppercase tracking-[0.08em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              {item.label}
+                            </div>
+                            <div className="mt-1 text-[20px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                              {item.value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-8">
+                    <div className="mx-auto grid max-w-[1040px] gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+                      <div className="space-y-4">
+                        <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                              {personalProfileIcon("photo")}
+                            </div>
+                            <div>
+                              <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Imagen de perfil</div>
+                              <div className="mt-1 text-[13px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                Elige el avatar del nuevo miembro del personal.
+                              </div>
+                              <div className="mt-4 flex items-center gap-5">
+                                <Image
+                                  src={staffForm.avatarUrl}
+                                  alt="Avatar seleccionado"
+                                  width={72}
+                                  height={72}
+                                  className="h-[72px] w-[72px] rounded-full object-cover"
+                                />
+                                <div className="flex flex-wrap gap-3">
+                                  {PERSONAL_AVATAR_OPTIONS.map((option) => {
+                                    const selected = staffForm.avatarUrl === option.src;
+                                    return (
+                                      <button
+                                        key={`staff-avatar-${option.key}`}
+                                        type="button"
+                                        onClick={() => updateStaffForm("avatarUrl", option.src)}
+                                        className={`rounded-full border-[5px] transition ${
+                                          selected
+                                            ? "border-[#4449D7] shadow-[0_10px_24px_rgba(68,73,215,0.22)]"
+                                            : "border-white hover:border-[#D8DDE7] hover:shadow-[0_10px_20px_rgba(15,23,42,0.10)]"
+                                        }`}
+                                        aria-label={option.label}
+                                      >
+                                        <Image
+                                          src={option.src}
+                                          alt={option.label}
+                                          width={58}
+                                          height={58}
+                                          className="h-[58px] w-[58px] rounded-full object-cover"
+                                        />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("name")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Nombre completo</div>
+                                <input
+                                  value={staffForm.fullName}
+                                  onChange={(e) => updateStaffForm("fullName", e.target.value)}
+                                  placeholder="Ej. Andrea Solís"
+                                  className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("role")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Rol</div>
+                                <input
+                                  value={staffForm.role}
+                                  onChange={(e) => updateStaffForm("role", e.target.value)}
+                                  placeholder="Ej. Coordinadora logística"
+                                  className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("area")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Área</div>
+                                <select
+                                  value={staffForm.area}
+                                  onChange={(e) => updateStaffForm("area", e.target.value)}
+                                  className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                >
+                                  <option value="">Selecciona un área</option>
+                                  <option>Operaciones</option>
+                                  <option>Almacén</option>
+                                  <option>Atención al cliente</option>
+                                  <option>Finanzas</option>
+                                  <option>Compras</option>
+                                  <option>Dirección</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("status")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Estado</div>
+                                <select
+                                  value={staffForm.status}
+                                  onChange={(e) => updateStaffForm("status", e.target.value)}
+                                  className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                >
+                                  <option>Activo</option>
+                                  <option>En formación</option>
+                                  <option>Temporal</option>
+                                  <option>Inactivo</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("email")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Correo Tawa</div>
+                                <input
+                                  value={staffForm.tawaEmail}
+                                  onChange={(e) => updateStaffForm("tawaEmail", e.target.value)}
+                                  placeholder="nombre@tawa.co"
+                                  className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("email")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Correo notificaciones</div>
+                                <input
+                                  value={staffForm.personalEmail}
+                                  onChange={(e) => updateStaffForm("personalEmail", e.target.value)}
+                                  placeholder="nombre@gmail.com"
+                                  className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("role")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Contraseña</div>
+                                <div className="mt-1 text-[12px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  Acceso inicial para entrar a Tawa.
+                                </div>
+                                <div className="relative mt-2">
+                                  <input
+                                    type={showStaffPassword ? "text" : "password"}
+                                    value={staffForm.password}
+                                    onChange={(e) => updateStaffForm("password", e.target.value)}
+                                    placeholder="Escribe una contraseña"
+                                    className="h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 pr-12 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                                    style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowStaffPassword((prev) => !prev)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7A8298]"
+                                    aria-label={showStaffPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                                  >
+                                    {showStaffPassword ? (
+                                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                        <path d="M3 3l18 18" />
+                                        <path d="M10.6 10.7a2 2 0 0 0 2.7 2.7" />
+                                        <path d="M9.4 5.2A10.7 10.7 0 0 1 12 5c5 0 9 4.5 10 7-0.4 1-1.3 2.5-2.7 3.9" />
+                                        <path d="M6.2 6.3C4.3 7.6 2.9 9.4 2 12c1 2.5 5 7 10 7 1.8 0 3.5-.6 5-1.5" />
+                                      </svg>
+                                    ) : (
+                                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("phone")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Teléfono</div>
+                                <input
+                                  value={staffForm.phone}
+                                  onChange={(e) => updateStaffForm("phone", e.target.value)}
+                                  placeholder="+34 600 000 000"
+                                  className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Turno</div>
+                            <select
+                              value={staffForm.shift}
+                              onChange={(e) => updateStaffForm("shift", e.target.value)}
+                              className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            >
+                              <option>Mañana</option>
+                              <option>Tarde</option>
+                              <option>Noche</option>
+                              <option>Mixto</option>
+                            </select>
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Ubicación / centro</div>
+                            <input
+                              value={staffForm.location}
+                              onChange={(e) => updateStaffForm("location", e.target.value)}
+                              placeholder="Ej. ES-SEG / Tawa Co"
+                              className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            />
+                          </div>
+
+                          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Nivel de acceso</div>
+                            <select
+                              value={staffForm.accessLevel}
+                              onChange={(e) => updateStaffForm("accessLevel", e.target.value)}
+                              className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            >
+                              <option>Operativo</option>
+                              <option>Supervisor</option>
+                              <option>Manager</option>
+                              <option>Administrador</option>
+                            </select>
+                          </div>
+
+                          <div className="col-span-2 rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                            <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                                {personalProfileIcon("notes")}
+                              </div>
+                              <div>
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Notas</div>
+                                <textarea
+                                  value={staffForm.notes}
+                                  onChange={(e) => updateStaffForm("notes", e.target.value)}
+                                  placeholder="Responsabilidades, observaciones o accesos especiales."
+                                  className="mt-2 min-h-[118px] w-full resize-none rounded-[20px] border-none bg-[#F5F6F8] px-4 py-3 text-[14px] text-[#2B334B] outline-none placeholder:text-[#96A0B5]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3">
+                          {staffError ? (
+                            <span className="text-[13px] text-[#C0392B]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              {staffError}
+                            </span>
+                          ) : null}
+                          {staffSaveOk ? (
+                            <span className="text-[13px] text-[#2B7A3D]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              {staffSaveOk}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={saveStaffMember}
+                            className="h-[48px] rounded-full bg-[#0B1230] px-7 text-[15px] text-white"
+                            style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                          >
+                            Guardar personal
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="rounded-[24px] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="text-[18px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                            Qué estamos guardando
+                          </div>
+                          <div className="mt-3 space-y-2 text-[13px] leading-[1.55] text-[#5B637A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            <div>Rol y área para ubicar a cada persona dentro de la operación.</div>
+                            <div>Turno, estado y centro para saber disponibilidad real.</div>
+                            <div>Correo Tawa, correo personal y contraseña inicial para acceso y notificaciones.</div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[24px] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="flex items-center justify-between">
+                            <div className="text-[18px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                              Personal agregado
+                            </div>
+                            <div className="rounded-full bg-[#F3F4F7] px-3 py-1 text-[12px] text-[#5B637A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              {staffMembers.length} registros
+                            </div>
+                          </div>
+
+                          <div className="mt-4 space-y-3">
+                            {staffMembers.length === 0 ? (
+                              <div className="rounded-[20px] bg-[#F5F6F8] px-4 py-4 text-[13px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                Aún no has agregado personal. Cuando guardes un miembro aparecerá aquí.
+                              </div>
+                            ) : (
+                              staffMembers.map((member) => (
+                                <div key={member.id} className="rounded-[20px] bg-[#F5F6F8] px-4 py-4">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-start gap-3">
+                                      <Image
+                                        src={member.avatarUrl}
+                                        alt={member.fullName}
+                                        width={46}
+                                        height={46}
+                                        className="h-[46px] w-[46px] rounded-full object-cover"
+                                      />
+                                      <div>
+                                      <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                        {member.fullName}
+                                      </div>
+                                      <div className="mt-1 text-[13px] text-[#5B637A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                        {member.role} · {member.area}
+                                      </div>
+                                    </div>
+                                    </div>
+                                    <span className="rounded-full bg-white px-3 py-1 text-[11px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                      {member.status}
+                                    </span>
+                                  </div>
+                                  <div className="mt-3 grid gap-2 text-[12px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                    <div>Tawa: {member.tawaEmail}</div>
+                                    <div>Personal: {member.personalEmail}</div>
+                                    <div>{member.phone}</div>
+                                    <div>{member.location} · {member.shift} · {member.accessLevel}</div>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : activeKey === "es-seg" || activeKey === "es-seg-info" || activeKey === "es-seg-distribution" || activeKey.startsWith("warehouse-") ? (
               <div className="h-full">
@@ -5100,6 +5885,887 @@ export default function DashboardDemarcaPage() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            ) : activeKey === "amigos" ? (
+              <div className="h-full">
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#F6F7F9]">
+                  <div className="px-8 pt-8">
+                    <div className="mx-auto flex max-w-[1040px] items-start justify-between rounded-[28px] bg-white px-7 py-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-[0.24em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Comunidad interna
+                        </div>
+                        <h2 className="mt-2 text-[22px] leading-none text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                          Amigos
+                        </h2>
+                        <p className="mt-3 max-w-[560px] text-[14px] leading-[1.55] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Aquí se muestran las fichas del personal que vas agregando desde configuración, con su correo Tawa, estado y datos operativos.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pl-6">
+                        <div className="min-w-[118px] rounded-[22px] bg-[#F5F6F8] px-4 py-3 text-center">
+                          <div className="text-[11px] uppercase tracking-[0.08em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            Amigos
+                          </div>
+                          <div className="mt-1 text-[20px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                            {staffMembers.length}
+                          </div>
+                        </div>
+                        <div className="min-w-[118px] rounded-[22px] bg-[#F5F6F8] px-4 py-3 text-center">
+                          <div className="text-[11px] uppercase tracking-[0.08em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            Activos
+                          </div>
+                          <div className="mt-1 text-[20px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                            {staffMembers.filter((member) => member.status === "Activo").length}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-8">
+                    <div className="mx-auto max-w-[1040px]">
+                      {staffMembers.length === 0 ? (
+                        <div className="flex min-h-[320px] items-center justify-center rounded-[28px] bg-white px-6 text-center text-[15px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Aún no hay amigos creados. Agrégalos desde Configuración → Agregar personal.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-5">
+                          {staffMembers.map((member) => (
+                            <div key={`friend-card-${member.id}`} className="rounded-[28px] bg-white px-6 py-5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-4">
+                                  <Image
+                                    src={member.avatarUrl}
+                                    alt={member.fullName}
+                                    width={64}
+                                    height={64}
+                                    className="h-16 w-16 rounded-full object-cover"
+                                  />
+                                  <div>
+                                    <div className="text-[18px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                      {member.fullName}
+                                    </div>
+                                    <div className="mt-1 text-[13px] text-[#5B637A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                      {member.role} · {member.area}
+                                    </div>
+                                    <div className="mt-2 inline-flex rounded-full bg-[#F5F6F8] px-3 py-1 text-[11px] text-[#596174]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                      {member.location}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="rounded-full bg-[#F5F6F8] px-3 py-1 text-[11px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  {member.status}
+                                </span>
+                              </div>
+
+                              <div className="mt-5 grid gap-3 rounded-[22px] bg-[#F5F6F8] px-4 py-4 text-[13px] text-[#566078]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                <div>
+                                  <span className="text-[#8A91A5]">Correo Tawa</span>
+                                  <div className="mt-1 text-[#1E253D]">{member.tawaEmail}</div>
+                                </div>
+                                <div>
+                                  <span className="text-[#8A91A5]">Correo notificaciones</span>
+                                  <div className="mt-1 text-[#1E253D]">{member.personalEmail}</div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                  <div>
+                                    <span className="text-[#8A91A5]">Teléfono</span>
+                                    <div className="mt-1 text-[#1E253D]">{member.phone}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-[#8A91A5]">Turno</span>
+                                    <div className="mt-1 text-[#1E253D]">{member.shift}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-[#8A91A5]">Acceso</span>
+                                    <div className="mt-1 text-[#1E253D]">{member.accessLevel}</div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => openStaffProfile(member)}
+                                  className="rounded-full border border-[#D6DBE5] bg-white px-4 py-2 text-[13px] text-[#1A213D]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                >
+                                  Ver ficha completa
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : activeKey === "amigos-ficha" ? (
+              <div className="h-full">
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#F6F7F9]">
+                  <div className="px-8 pt-8">
+                    <div className="mx-auto flex max-w-[1040px] items-start justify-between rounded-[28px] bg-white px-7 py-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-[0.24em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Amigos
+                        </div>
+                        <h2 className="mt-2 text-[22px] leading-none text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                          Ficha completa
+                        </h2>
+                        <p className="mt-3 max-w-[560px] text-[14px] leading-[1.55] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Edita el acceso, cambia la contraseña o elimina el contacto si ya no debe entrar a Tawa.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveKey("amigos");
+                          setStaffEditorError("");
+                          setStaffEditorSaveOk("");
+                        }}
+                        className="h-[44px] rounded-full border border-[#D6DBE5] bg-white px-5 text-[14px] text-[#1A213D]"
+                        style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                      >
+                        Volver a Amigos
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-8">
+                    <div className="mx-auto max-w-[1040px]">
+                      {!selectedStaffMember || !staffEditorForm ? (
+                        <div className="flex min-h-[320px] items-center justify-center rounded-[28px] bg-white px-6 text-center text-[15px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          No se encontró la ficha del contacto seleccionado.
+                        </div>
+                      ) : (
+                        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+                          <div className="space-y-4">
+                            <div className="rounded-[24px] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                              <div className="flex items-center gap-4">
+                                <Image
+                                  src={staffEditorForm.avatarUrl}
+                                  alt={staffEditorForm.fullName}
+                                  width={84}
+                                  height={84}
+                                  className="h-[84px] w-[84px] rounded-full object-cover"
+                                />
+                                <div className="flex flex-wrap gap-3">
+                                  {PERSONAL_AVATAR_OPTIONS.map((option) => {
+                                    const selected = staffEditorForm.avatarUrl === option.src;
+                                    return (
+                                      <button
+                                        key={`editor-avatar-${option.key}`}
+                                        type="button"
+                                        onClick={() => updateStaffEditorField("avatarUrl", option.src)}
+                                        className={`rounded-full border-[5px] transition ${
+                                          selected
+                                            ? "border-[#4449D7] shadow-[0_10px_24px_rgba(68,73,215,0.22)]"
+                                            : "border-white hover:border-[#D8DDE7] hover:shadow-[0_10px_20px_rgba(15,23,42,0.10)]"
+                                        }`}
+                                      >
+                                        <Image src={option.src} alt={option.label} width={56} height={56} className="h-14 w-14 rounded-full object-cover" />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              {[
+                                { key: "fullName", label: "Nombre completo", value: staffEditorForm.fullName },
+                                { key: "role", label: "Rol", value: staffEditorForm.role },
+                                { key: "area", label: "Área", value: staffEditorForm.area },
+                                { key: "phone", label: "Teléfono", value: staffEditorForm.phone },
+                                { key: "tawaEmail", label: "Correo Tawa", value: staffEditorForm.tawaEmail },
+                                { key: "personalEmail", label: "Correo notificaciones", value: staffEditorForm.personalEmail },
+                                { key: "location", label: "Ubicación / centro", value: staffEditorForm.location },
+                              ].map((field) => (
+                                <div key={field.key} className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                                  <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                    {field.label}
+                                  </div>
+                                  <input
+                                    value={field.value}
+                                    onChange={(e) => updateStaffEditorField(field.key as keyof StaffMemberForm, e.target.value)}
+                                    className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
+                                    style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                  />
+                                </div>
+                              ))}
+
+                              <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                  Contraseña
+                                </div>
+                                <div className="relative mt-2">
+                                  <input
+                                    type={showEditorPassword ? "text" : "password"}
+                                    value={staffEditorForm.password}
+                                    onChange={(e) => updateStaffEditorField("password", e.target.value)}
+                                    className="h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 pr-12 text-[14px] text-[#2B334B] outline-none"
+                                    style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowEditorPassword((prev) => !prev)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7A8298]"
+                                    aria-label={showEditorPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                                  >
+                                    {showEditorPassword ? "◠" : "◉"}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                  Turno
+                                </div>
+                                <select
+                                  value={staffEditorForm.shift}
+                                  onChange={(e) => updateStaffEditorField("shift", e.target.value)}
+                                  className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                >
+                                  <option>Mañana</option>
+                                  <option>Tarde</option>
+                                  <option>Noche</option>
+                                  <option>Mixto</option>
+                                </select>
+                              </div>
+
+                              <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                  Estado
+                                </div>
+                                <select
+                                  value={staffEditorForm.status}
+                                  onChange={(e) => updateStaffEditorField("status", e.target.value)}
+                                  className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                >
+                                  <option>Activo</option>
+                                  <option>En formación</option>
+                                  <option>Temporal</option>
+                                  <option>Inactivo</option>
+                                </select>
+                              </div>
+
+                              <div className="col-span-2 rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                                <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                  Notas
+                                </div>
+                                <textarea
+                                  value={staffEditorForm.notes}
+                                  onChange={(e) => updateStaffEditorField("notes", e.target.value)}
+                                  className="mt-2 min-h-[118px] w-full resize-none rounded-[20px] border-none bg-[#F5F6F8] px-4 py-3 text-[14px] text-[#2B334B] outline-none"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3">
+                              {staffEditorError ? (
+                                <span className="text-[13px] text-[#C0392B]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  {staffEditorError}
+                                </span>
+                              ) : null}
+                              {staffEditorSaveOk ? (
+                                <span className="text-[13px] text-[#2B7A3D]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  {staffEditorSaveOk}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={deleteSelectedStaff}
+                                className="h-[48px] rounded-full border border-[#E4C9CC] bg-white px-6 text-[15px] text-[#B04A53]"
+                                style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                              >
+                                Eliminar contacto
+                              </button>
+                              <button
+                                type="button"
+                                onClick={saveStaffEditor}
+                                className="h-[48px] rounded-full bg-[#0B1230] px-7 text-[15px] text-white"
+                                style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                              >
+                                Guardar cambios
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="rounded-[24px] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                              <div className="text-[18px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                Control de acceso
+                              </div>
+                              <div className="mt-3 space-y-2 text-[13px] leading-[1.55] text-[#5B637A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                <div>Si cambias la contraseña, la persona anterior ya no podrá entrar con la clave antigua.</div>
+                                <div>Desde aquí puedes actualizar su correo Tawa o desactivar su estado si deja de usar la cuenta.</div>
+                                <div>Eliminar contacto borra la ficha de esta lista.</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : activeKey === "calendario" ? (
+              <div className="h-full">
+                <div className="flex h-full overflow-hidden rounded-[28px] bg-[#F7F8FB]">
+                  <aside className="flex w-[210px] shrink-0 flex-col border-r border-[#E4E8F0] bg-[#F7F8FB] px-4 py-5">
+                    <div className="flex items-center gap-3 text-[#151A34]">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M7 3v4M17 3v4M4 9h16" />
+                          <rect x="4" y="5" width="16" height="16" rx="2" />
+                        </svg>
+                      </div>
+                      <div className="text-[20px]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                        Calendario
+                      </div>
+                    </div>
+
+                    <div className="relative mt-5">
+                      <button
+                        type="button"
+                        onClick={() => setShowCalendarCreateMenu((prev) => !prev)}
+                        className="flex h-[46px] w-full items-center justify-center gap-2 rounded-2xl bg-white text-[14px] text-[#151A34] shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
+                        style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                      >
+                        <span className="text-[18px]">+</span>
+                        Crear
+                        <span className="ml-1 text-[12px]">▾</span>
+                      </button>
+                      {showCalendarCreateMenu ? (
+                        <div className="absolute left-0 top-[54px] z-20 w-full rounded-[18px] bg-white p-2 shadow-[0_14px_30px_rgba(15,23,42,0.12)]">
+                          {[
+                            { key: "evento", label: "Evento" },
+                            { key: "tarea", label: "Tarea" },
+                            { key: "agenda", label: "Agenda de citas" },
+                          ].map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => {
+                                setCalendarCreateTab(item.key as "evento" | "tarea" | "agenda");
+                                setShowCalendarCreateMenu(false);
+                                if (item.key === "evento") {
+                                  setShowCalendarEventModal(true);
+                                }
+                              }}
+                              className="flex w-full items-center rounded-[14px] px-4 py-3 text-left text-[14px] text-[#232744] hover:bg-[#F3F6FA]"
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-5 rounded-[22px] bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[14px] text-[#151A34]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                          {calendarMonthLabel}
+                        </div>
+                        <div className="flex items-center gap-1 text-[#64708A]">
+                          <button type="button" onClick={() => setCalendarFocusDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, prev.getDate()))}>‹</button>
+                          <button type="button" onClick={() => setCalendarFocusDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, prev.getDate()))}>›</button>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-7 gap-y-1 text-center">
+                        {["D", "L", "M", "X", "J", "V", "S"].map((label) => (
+                          <div key={label} className="text-[10px] text-[#99A1B3]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            {label}
+                          </div>
+                        ))}
+                        {Array.from({ length: 35 }, (_, idx) => {
+                          const day = new Date(calendarWeekStart);
+                          day.setDate(calendarWeekStart.getDate() - calendarWeekStart.getDay() + idx);
+                          const isCurrentMonth = day.getMonth() === calendarFocusDate.getMonth();
+                          const isSelected = day.toDateString() === calendarFocusDate.toDateString();
+                          return (
+                            <button
+                              key={`mini-mix-${day.toISOString()}`}
+                              type="button"
+                              onClick={() => setCalendarFocusDate(new Date(day))}
+                              className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[11px] ${
+                                isSelected ? "bg-[#1D63D8] text-white" : isCurrentMonth ? "text-[#2E3550]" : "text-[#C6CCDA]"
+                              }`}
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            >
+                              {day.getDate()}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 text-[12px] uppercase tracking-[0.08em] text-[#99A1B3]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                      Mis calendarios
+                    </div>
+                    <div className="mt-3 space-y-3">
+                      {[
+                        { label: personalProfile.fullName, color: "#1D63D8" },
+                        { label: "Cumpleaños", color: "#B58FEF" },
+                        { label: "Tasks", color: "#8FD5C6" },
+                      ].map((item) => (
+                        <label key={item.label} className="flex items-center gap-3 text-[13px] text-[#2E3550]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          <span className="h-4 w-4 rounded-[4px]" style={{ backgroundColor: item.color }} />
+                          {item.label}
+                        </label>
+                      ))}
+                    </div>
+                  </aside>
+
+                  <div className="flex min-w-0 flex-1 flex-col px-5 py-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="inline-flex rounded-full bg-[#ECEFF5] p-1">
+                          {["Card", "Blocks", "Table"].map((tab, index) => (
+                            <button
+                              key={tab}
+                              type="button"
+                              className={`rounded-full px-5 py-2 text-[14px] ${index === 0 ? "bg-[#151A34] text-white" : "text-[#2C3450]"}`}
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            >
+                              {tab}
+                            </button>
+                          ))}
+                        </div>
+                        <button type="button" className="rounded-full bg-[#ECEFF5] px-4 py-2 text-[14px] text-[#2C3450]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Semana ▾
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button type="button" onClick={() => setCalendarFocusDate(new Date())} className="rounded-full border border-[#D4DAE6] bg-white px-4 py-2 text-[13px] text-[#2E3550]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Hoy
+                        </button>
+                        <button type="button" onClick={() => setCalendarFocusDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7))} className="flex h-9 w-9 items-center justify-center rounded-full text-[22px] text-[#2C3450] hover:bg-white">‹</button>
+                        <button type="button" onClick={() => setCalendarFocusDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7))} className="flex h-9 w-9 items-center justify-center rounded-full text-[22px] text-[#2C3450] hover:bg-white">›</button>
+                        <div className="text-[24px] text-[#151A34]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                          {calendarMonthLabel}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex min-h-0 flex-1 flex-col rounded-[26px] bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+                      <div className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))]">
+                        <div />
+                        {calendarWeekDays.slice(0, 4).map((day, dayIndex) => (
+                          <div key={`cal-head-${day.toISOString()}`} className="text-center">
+                            <div className={`text-[46px] leading-none ${dayIndex === 2 ? "text-[#151A34]" : "text-[#D9DCE4]"}`} style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                              {day.getDate()}
+                              <span className="ml-1 text-[16px] align-middle font-normal" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                {["/Sun", "/Mon", "/Tue", "/Wed"][dayIndex]}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 grid min-h-0 flex-1 grid-cols-[72px_repeat(4,minmax(0,1fr))]">
+                        <div className="pt-1">
+                          {[10, 11, 12, 13, 14].map((hour) => (
+                            <div key={`mix-hour-${hour}`} className="flex h-[94px] items-start pr-4 pt-2 text-right text-[16px] text-[#151A34]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              {hour}:00
+                            </div>
+                          ))}
+                        </div>
+
+                        {calendarWeekDays.slice(0, 4).map((day, dayIndex) => (
+                          <div key={`mix-col-${day.toISOString()}`} className="relative border-l border-dashed border-[#E5E7EF]">
+                            {[10, 11, 12, 13, 14].map((hour) => (
+                              <div key={`mix-grid-${dayIndex}-${hour}`} className="h-[94px] border-t border-dashed border-[#E5E7EF]" />
+                            ))}
+
+                            {dayIndex === 0 ? (
+                              <div className="absolute left-4 top-[38px] w-[160px] rounded-[22px] border-2 border-dashed border-[#E7D7FF] bg-white px-5 py-9 text-center">
+                                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#DEC4FF] text-[30px] text-[#232744]">+</div>
+                                <div className="mt-5 text-[15px] text-[#232744]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                                  Add New Task
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {dayIndex === 1 ? (
+                              <>
+                                <div className="absolute left-4 top-[24px] w-[176px] rounded-[22px] bg-[#DDECE9] px-4 py-3 text-[#202845] shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+                                  <div className="flex items-start justify-between">
+                                    <div>
+                                      <div className="text-[10px]">Redesign</div>
+                                      <div className="mt-1 text-[15px]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>e - Commerce</div>
+                                    </div>
+                                    <div className="text-[18px]">•••</div>
+                                  </div>
+                                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                                    <div className="flex -space-x-2">
+                                      {PERSONAL_AVATAR_OPTIONS.slice(0, 4).map((option) => (
+                                        <Image key={`mix-a-${option.key}`} src={option.src} alt={option.label} width={22} height={22} className="h-[22px] w-[22px] rounded-full border-2 border-[#DDECE9] object-cover" />
+                                      ))}
+                                    </div>
+                                    <span>08:00-12:00</span>
+                                  </div>
+                                </div>
+
+                                <div className="absolute left-4 top-[236px] w-[176px] rounded-[22px] bg-[#DDECE9] px-4 py-3 text-[#202845] shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+                                  <div className="text-[10px]">Design System</div>
+                                  <div className="mt-1 text-[15px]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Team Meeting</div>
+                                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                                    <div className="flex -space-x-2">
+                                      {PERSONAL_AVATAR_OPTIONS.slice(0, 4).map((option) => (
+                                        <Image key={`mix-b-${option.key}`} src={option.src} alt={option.label} width={22} height={22} className="h-[22px] w-[22px] rounded-full border-2 border-[#DDECE9] object-cover" />
+                                      ))}
+                                    </div>
+                                    <span>Join</span>
+                                  </div>
+                                </div>
+                              </>
+                            ) : null}
+
+                            {dayIndex === 2 ? (
+                              <div className="absolute left-4 top-[112px] w-[184px] rounded-[22px] bg-[#E8FF58] px-4 py-3 text-[#202845] shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <div className="text-[10px]">Design System</div>
+                                    <div className="mt-1 text-[15px]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Finance App</div>
+                                  </div>
+                                  <div className="text-[18px]">•••</div>
+                                </div>
+                                <div className="mt-3 flex items-center justify-between text-[11px]">
+                                  <div className="flex -space-x-2">
+                                    {PERSONAL_AVATAR_OPTIONS.slice(0, 4).map((option) => (
+                                      <Image key={`mix-c-${option.key}`} src={option.src} alt={option.label} width={22} height={22} className="h-[22px] w-[22px] rounded-full border-2 border-[#E8FF58] object-cover" />
+                                    ))}
+                                  </div>
+                                  <span>All Team</span>
+                                </div>
+                                <div className="mt-3 text-[11px] leading-[1.3] text-[#41474F]">Use new technologies and AI for this redesign.</div>
+                              </div>
+                            ) : null}
+
+                            {dayIndex === 3 ? (
+                              <div className="absolute left-4 top-[24px] w-[182px] rounded-[22px] bg-[#D8B8F8] px-4 py-3 text-[#202845] shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <div className="text-[10px]">Redesign</div>
+                                    <div className="mt-1 text-[15px]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Finance Web</div>
+                                  </div>
+                                  <div className="text-[18px]">•••</div>
+                                </div>
+                                <div className="mt-3 text-[11px]">Completed : 5 / 8</div>
+                                <div className="mt-2 h-3 rounded-full bg-white/40">
+                                  <div className="h-full w-[62%] rounded-full bg-white" />
+                                </div>
+                                <div className="mt-3 space-y-1 text-[11px]">
+                                  {["Research", "Wireframe", "UI", "A/B Test"].map((item) => (
+                                    <div key={item} className="flex items-center gap-2">
+                                      <span className="flex h-4 w-4 items-center justify-center rounded-[5px] border border-[#6D6290] text-[10px]">✓</span>
+                                      <span>{item}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between rounded-[26px] bg-[#EFF2F6] px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="inline-flex h-[52px] items-center gap-3 rounded-[18px] bg-white px-4 text-[13px] text-[#232744] shadow-[0_2px_10px_rgba(15,23,42,0.03)]"
+                          style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <path d="M4 5h16l-6 7v5l-4 2v-7z" />
+                          </svg>
+                          <span>Filters</span>
+                          <span className="rounded-full bg-[#B9ADF8] px-2.5 py-0.5 text-[11px] text-white">10</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="inline-flex h-[52px] items-center gap-3 rounded-[18px] bg-white px-6 text-[13px] text-[#232744] shadow-[0_2px_10px_rgba(15,23,42,0.03)]"
+                          style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <rect x="3" y="5" width="18" height="14" rx="2" />
+                            <circle cx="9" cy="10" r="2" />
+                            <path d="m21 15-4.5-4.5L8 19" />
+                          </svg>
+                          <span>Add Image</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-8">
+                        <div className="inline-flex items-center rounded-[18px] bg-white p-1 shadow-[0_2px_10px_rgba(15,23,42,0.03)]">
+                          {[
+                            {
+                              key: "doc",
+                              icon: (
+                                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                  <path d="M7 3h7l5 5v13H7z" />
+                                  <path d="M14 3v5h5" />
+                                </svg>
+                              ),
+                            },
+                            {
+                              key: "draw",
+                              icon: (
+                                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                  <path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z" />
+                                  <path d="m13.5 6.5 4 4" />
+                                </svg>
+                              ),
+                            },
+                            {
+                              key: "text",
+                              icon: <span className="text-[18px]">T</span>,
+                            },
+                            {
+                              key: "note",
+                              icon: (
+                                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                  <path d="M7 3h7l5 5v13H7z" />
+                                  <path d="M14 3v5h5" />
+                                  <path d="M10 13h6M10 17h5" />
+                                </svg>
+                              ),
+                            },
+                          ].map((item, index) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              className={`flex h-10 w-10 items-center justify-center rounded-[14px] text-[#232744] ${index === 1 ? "bg-[#151A34] text-white shadow-[0_6px_16px_rgba(21,26,52,0.18)]" : ""}`}
+                            >
+                              {item.icon}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-3 text-[13px] text-[#232744]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          <span>Color :</span>
+                          <span className="h-9 w-9 rounded-full bg-[#DDECE9]" />
+                          <span className="h-9 w-9 rounded-full bg-[#E5FF2F]" />
+                          <span className="h-9 w-9 rounded-full bg-[#D8B8F8]" />
+                          <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-dotted border-[#8D94A8] text-[22px] text-[#232744]">+</button>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="inline-flex h-[52px] items-center gap-3 rounded-[18px] bg-white px-6 text-[13px] text-[#EB6B6B] shadow-[0_2px_10px_rgba(15,23,42,0.03)]"
+                        style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="m8 6 1 14h6l1-14" />
+                        </svg>
+                        <span>Eliminar</span>
+                        <span className="rounded-full bg-[#F9DADA] px-2.5 py-0.5 text-[11px] text-[#EB6B6B]">10</span>
+                      </button>
+                    </div>
+
+                    {showCalendarEventModal ? (
+                      <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#1B2140]/18 p-4">
+                        <div className="w-full max-w-[430px] rounded-[26px] bg-[#F5F7FB] px-5 py-4 shadow-[0_24px_70px_rgba(15,23,42,0.20)]">
+                          <div className="flex items-center justify-between border-b border-[#E1E6F0] pb-4">
+                            <button
+                              type="button"
+                              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[17px] text-[#4A5268] shadow-[0_4px_12px_rgba(15,23,42,0.05)] hover:bg-[#F8FAFD]"
+                              onClick={() => setShowCalendarEventModal(false)}
+                            >
+                              ≡
+                            </button>
+                            <div className="text-[14px] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              Nuevo elemento de calendario
+                            </div>
+                            <button
+                              type="button"
+                              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[22px] leading-none text-[#4A5268] shadow-[0_4px_12px_rgba(15,23,42,0.05)] hover:bg-[#F8FAFD]"
+                              onClick={() => setShowCalendarEventModal(false)}
+                            >
+                              ×
+                            </button>
+                          </div>
+
+                          <div className="mt-4 pl-10">
+                            <input
+                              value={calendarEventTitle}
+                              onChange={(e) => setCalendarEventTitle(e.target.value)}
+                              placeholder="Agregar título"
+                              className="h-[44px] w-full border-b-2 border-[#3767E0] bg-transparent text-[18px] text-[#1B2140] outline-none placeholder:text-[#68728A]"
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            />
+                          </div>
+
+                          <div className="mt-4 flex items-center gap-2 pl-10">
+                            {[
+                              { key: "evento", label: "Evento" },
+                              { key: "tarea", label: "Tarea" },
+                              { key: "agenda", label: "Agenda de citas" },
+                            ].map((tab) => (
+                              <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setCalendarCreateTab(tab.key as "evento" | "tarea" | "agenda")}
+                                className={`rounded-[12px] px-3 py-2 text-[13px] transition ${
+                                  calendarCreateTab === tab.key ? "bg-[#D5EBFF] text-[#1B2140] shadow-[0_6px_16px_rgba(58,141,255,0.12)]" : "text-[#4A5268] hover:bg-white/70"
+                                }`}
+                                style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                            <span className="rounded-full bg-[#3767E0] px-2 py-0.5 text-[10px] text-white" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              Nuevo
+                            </span>
+                          </div>
+
+                          <div className="mt-5 space-y-2.5">
+                            <div className="grid grid-cols-[38px_minmax(0,1fr)] items-start gap-3 rounded-[18px] bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#EDF3FF] text-[16px] text-[#3767E0]">◷</div>
+                              <div>
+                                <div className="text-[14px] text-[#2D344B]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  Viernes, 10 abril&nbsp;&nbsp; 7:30pm - 8:30pm
+                                </div>
+                                <div className="mt-1 text-[12px] text-[#6E768E]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  Zona horaria · No se repite
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="relative grid grid-cols-[38px_minmax(0,1fr)] items-start gap-3 rounded-[18px] bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#F1EEFF] text-[16px] text-[#7055D8]">👥</div>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCalendarGuestsMenu((prev) => !prev)}
+                                  className="text-[14px] text-[#4A5268]"
+                                  style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                >
+                                  Agregar invitados
+                                </button>
+                                {calendarGuestIds.length > 0 ? (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {staffMembers
+                                      .filter((member) => calendarGuestIds.includes(member.id))
+                                      .map((member) => (
+                                        <span
+                                          key={`guest-pill-${member.id}`}
+                                          className="rounded-full bg-[#EEF4FF] px-3 py-1 text-[11px] text-[#3767E0]"
+                                          style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                                        >
+                                          {member.fullName}
+                                        </span>
+                                      ))}
+                                  </div>
+                                ) : null}
+                                {showCalendarGuestsMenu ? (
+                                  <div className="absolute left-[42px] top-[54px] z-20 w-[290px] rounded-[18px] bg-white p-2 shadow-[0_14px_30px_rgba(15,23,42,0.12)]">
+                                    {staffMembers.length === 0 ? (
+                                      <div className="px-3 py-3 text-[13px] text-[#6E768E]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                        No hay amigos creados todavía.
+                                      </div>
+                                    ) : (
+                                      staffMembers.map((member) => {
+                                        const selected = calendarGuestIds.includes(member.id);
+                                        return (
+                                          <button
+                                            key={`guest-option-${member.id}`}
+                                            type="button"
+                                            onClick={() =>
+                                              setCalendarGuestIds((prev) =>
+                                                prev.includes(member.id) ? prev.filter((item) => item !== member.id) : [...prev, member.id]
+                                              )
+                                            }
+                                            className="flex w-full items-center justify-between rounded-[14px] px-3 py-3 text-left hover:bg-[#F3F6FA]"
+                                          >
+                                            <span className="flex items-center gap-3">
+                                              <Image src={member.avatarUrl} alt={member.fullName} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                                              <span className="text-[13px] text-[#232744]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                                {member.fullName}
+                                              </span>
+                                            </span>
+                                            <span className={`flex h-5 w-5 items-center justify-center rounded-[6px] border text-[11px] ${selected ? "border-[#3767E0] bg-[#3767E0] text-white" : "border-[#CBD2E1] text-transparent"}`}>
+                                              ✓
+                                            </span>
+                                          </button>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-[38px_minmax(0,1fr)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#E9FFF3] text-[16px] text-[#19A56F]">🎥</div>
+                              <div className="text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                Agregar una videoconferencia de Google Meet
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-[38px_minmax(0,1fr)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#FFF0F0] text-[16px] text-[#E06161]">📍</div>
+                              <div className="text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                Agregar lugar
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-[38px_minmax(0,1fr)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#F4F5F8] text-[16px] text-[#4A5268]">☰</div>
+                              <div className="text-[14px] leading-[1.45] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                Agregar descripción o un archivo adjunto de Google Drive
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-[38px_minmax(0,1fr)] items-start gap-3 rounded-[18px] bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#F8F2E8] text-[16px] text-[#A36A2B]">🗓</div>
+                              <div>
+                                <div className="flex items-center gap-2 text-[14px] text-[#2D344B]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  <span>Stephany Pizan</span>
+                                  <span className="h-4 w-4 rounded-full bg-[#3A8DFF]" />
+                                </div>
+                                <div className="mt-1 text-[12px] text-[#6E768E]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                  Ocupado · Visibilidad predeterminada · Notificar ...
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-6 flex items-center justify-end gap-3 border-t border-[#E1E6F0] pt-4">
+                            <button
+                              type="button"
+                              className="rounded-full px-3 py-2 text-[14px] text-[#3767E0] hover:bg-white/70"
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            >
+                              Más opciones
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowCalendarEventModal(false)}
+                              className="rounded-full bg-[#3767E0] px-6 py-2.5 text-[14px] text-white shadow-[0_10px_24px_rgba(55,103,224,0.28)]"
+                              style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                            >
+                              Guardar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
