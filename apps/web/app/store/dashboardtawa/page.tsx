@@ -1908,7 +1908,7 @@ export default function DashboardDemarcaPage() {
             <div className="h-[calc(100%-77px)] overflow-y-auto px-5 pb-6 pt-3">
               <div className="mt-2">
                 <p
-                  className="max-w-[180px] text-[28px] font-black leading-[1.08] tracking-[-0.02em] text-[#121633]"
+                  className="max-w-[180px] text-[21px] font-black leading-[1.08] tracking-[-0.02em] text-[#121633]"
                   style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}
                 >
                   Stay Sharp, Stay Productive! 🔥
