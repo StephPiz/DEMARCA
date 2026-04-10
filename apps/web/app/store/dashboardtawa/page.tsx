@@ -350,12 +350,37 @@ const menu: MenuItem[] = [
   { key: "finanzas", label: "Finanzas", path: "/store/payouts", isMain: true },
   { key: "tareas", label: "Tareas", path: "/store/tasks", isMain: true },
   { key: "chat", label: "Chat", path: "/store/chat", isMain: true },
-  { key: "configuracion", label: "Configuración", subLabel: "Editar perfil", path: "/store/settings", isMain: true },
+  { key: "configuracion", label: "Configuración", path: "/store/settings", isMain: true, isGroup: true },
+  { key: "editar-perfil", label: "Editar perfil", indent: 1 },
   { key: "analytics", label: "Analytics", path: "/store/analytics", isMain: true },
   { key: "soporte", label: "Soporte", path: "/store/support", isMain: true },
   { key: "audit", label: "Audit", path: "/store/audit", isMain: true },
   { key: "logout", label: "Logout", action: "logout", isMain: true },
 ];
+
+const PERSONAL_AVATAR_OPTIONS = [
+  { key: "steph01", label: "steph01", src: "/branding/steph01.png" },
+  { key: "katy01", label: "katy01", src: "/branding/katy01.png" },
+  { key: "ale01", label: "ale01", src: "/branding/ale01.png" },
+  { key: "chica01", label: "chica01", src: "/branding/chica01.png" },
+] as const;
+
+const DASHBOARD_CHAT_PREVIEW = [
+  {
+    id: "incoming",
+    author: "Albert",
+    text: "Ya dejé listos los cambios del catálogo para la tarde.",
+    time: "12:58",
+    outgoing: false,
+  },
+  {
+    id: "outgoing",
+    author: "Steph TAWA",
+    text: "Perfecto, súbelo y luego revisamos el feed de Shopify juntos.",
+    time: "13:00",
+    outgoing: true,
+  },
+] as const;
 
 const WAREHOUSE_MAP_BLOCKS: WarehouseMapBlock[] = [
   { key: "A", label: "BLOQUE A", itemCount: 24, rows: [1], x: 19, y: 24, w: 11, h: 9 },
@@ -712,21 +737,6 @@ export default function DashboardDemarcaPage() {
     marketplaces: ["Shopify"],
     warehouses: ["ES-SEG"],
   });
-  const [userName] = useState(() => {
-    if (typeof window === "undefined") return "Nombre de usuario";
-    try {
-      const userRaw = localStorage.getItem("user");
-      if (!userRaw) return "Nombre de usuario";
-      const parsed = JSON.parse(userRaw) as { fullName?: string; email?: string };
-      const fullName = String(parsed.fullName || "").trim();
-      if (fullName) return fullName;
-      const emailLocalPart = String(parsed.email || "").split("@")[0].trim();
-      if (!emailLocalPart) return "Nombre de usuario";
-      return emailLocalPart.charAt(0).toUpperCase() + emailLocalPart.slice(1).toLowerCase();
-    } catch {
-      return "Nombre de usuario";
-    }
-  });
   const [personalProfile, setPersonalProfile] = useState<PersonalProfile>(() => {
     if (typeof window === "undefined") {
       return {
@@ -782,6 +792,7 @@ export default function DashboardDemarcaPage() {
     }
   });
   const [personalProfileSaveOk, setPersonalProfileSaveOk] = useState("");
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [storeName] = useState(() => {
     if (typeof window === "undefined") return "demarca.";
     try {
@@ -1996,7 +2007,7 @@ export default function DashboardDemarcaPage() {
             <div className="h-[calc(100%-77px)] overflow-y-auto px-5 pb-6 pt-3">
               <div className="mt-2">
                 <p
-                  className="max-w-[180px] text-[21px] font-black leading-[1.08] tracking-[-0.02em] text-[#121633]"
+                  className="max-w-[180px] text-[21px] font-normal leading-[1.08] tracking-[-0.02em] text-[#121633]"
                   style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}
                 >
                   Stay Sharp, Stay Productive! 🔥
@@ -2035,7 +2046,17 @@ export default function DashboardDemarcaPage() {
                           logout();
                           return;
                         }
-                        if (!item.path && !item.emptyText && item.isGroup) return;
+                        if (item.key === "configuracion") {
+                          if (hasChildren && collapsedSections[item.key]) {
+                            setCollapsedSections((prev) => ({ ...prev, [item.key]: false }));
+                          }
+                          activateDashboardMenu(item.key);
+                          return;
+                        }
+                        if (item.isGroup && hasChildren) {
+                          setCollapsedSections((prev) => ({ ...prev, [item.key]: !prev[item.key] }));
+                          return;
+                        }
                         activateDashboardMenu(item.key);
                       }}
                         className={`w-full rounded-full px-4 py-2 text-left transition ${
@@ -2164,18 +2185,26 @@ export default function DashboardDemarcaPage() {
 
         <section className="flex min-w-0 flex-1 flex-col gap-4">
           <header className="flex h-[84px] items-center justify-between rounded-2xl bg-white px-4 shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
-            <div className="flex items-center gap-3">
-              <Image src="/branding/steph01.png" alt="Usuario" width={56} height={56} className="h-14 w-14 rounded-full object-cover" priority />
+            <button
+              type="button"
+              className="flex items-center gap-3 rounded-2xl px-2 py-1 text-left transition hover:bg-[#F6F7FA]"
+              onClick={() => {
+                setCollapsedSections((prev) => ({ ...prev, configuracion: false }));
+                setActiveKey("editar-perfil");
+                setShowStoreProfile(false);
+              }}
+            >
+              <Image src={personalProfile.avatarUrl} alt="Usuario" width={56} height={56} className="h-14 w-14 rounded-full object-cover" priority />
               <div>
                 <div suppressHydrationWarning className="text-[18px] leading-none text-[#1B2140]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
-                  {userName}
+                  {personalProfile.fullName}
                 </div>
                 <div className="mt-1 text-[14px] text-[#4f5568]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                   <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-[#18C26E]" />
                   Online
                 </div>
               </div>
-            </div>
+            </button>
 
             <div className="mx-6 flex max-w-[460px] flex-1 flex-col">
               <form
@@ -3793,54 +3822,160 @@ export default function DashboardDemarcaPage() {
                   </div>
                 </div>
               </div>
-            ) : activeKey === "configuracion" ? (
+            ) : activeKey === "dashboard" ? (
               <div className="h-full">
-                <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-white">
-                  <div className="flex items-start justify-between px-10 pt-7">
-                    <div>
-                      <h2 className="text-[32px] leading-none text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
-                        Información personal
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#F6F7F9]">
+                  <div className="px-8 pt-8">
+                    <div className="mx-auto max-w-[980px]">
+                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                        Dashboard
+                      </div>
+                      <h2 className="mt-2 text-[24px] leading-none text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                        Chat
                       </h2>
-                      <p className="mt-2 text-[15px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
-                        Edita tu perfil dentro de Tawa con el mismo lenguaje visual del dashboard.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {personalProfileSaveOk ? (
-                        <span className="text-[13px] text-[#2B7A3D]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
-                          {personalProfileSaveOk}
-                        </span>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="h-[46px] rounded-full border border-[#D6DBE5] bg-white px-6 text-[15px] text-[#1A213D]"
-                        style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
-                        onClick={() => {
-                          if (profileEditable) {
-                            if (typeof window !== "undefined") {
-                              localStorage.setItem("tawa-personal-profile", JSON.stringify(personalProfile));
-                            }
-                            setPersonalProfileSaveOk("Perfil actualizado.");
-                            window.setTimeout(() => setPersonalProfileSaveOk(""), 2200);
-                          }
-                          setProfileEditable((prev) => !prev);
-                        }}
-                      >
-                        {profileEditable ? "Guardar cambios" : "Editar perfil"}
-                      </button>
                     </div>
                   </div>
 
-                  <div className="relative min-h-0 flex-1 overflow-y-auto rounded-b-2xl bg-[#E6E8EA] px-10 pb-10 pt-7">
-                    <div className="mx-auto max-w-[1020px]">
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-[56px_minmax(0,1fr)_88px] items-center gap-5 rounded-[26px] bg-white px-6 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                  <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
+                    <div className="mx-auto max-w-[980px]">
+                      <div className="max-w-[420px] rounded-[34px] bg-[#EEF1F6] p-5 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#1B2140] shadow-[0_4px_14px_rgba(15,23,42,0.08)]">
+                              {menuIcon("chat")}
+                            </div>
+                            <div className="text-[21px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                              Chat
+                            </div>
+                          </div>
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#B8ADF7] text-[18px] text-white" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                            10
+                          </div>
+                        </div>
+
+                        <div className="mt-5 flex items-center justify-between">
+                          <div className="text-[15px] text-[#3E455C]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            Albert is typing...
+                          </div>
+                          <div className="flex -space-x-2">
+                            {["/branding/steph01.png", "/branding/ale01.png", "/branding/katy01.png"].map((src) => (
+                              <Image
+                                key={src}
+                                src={src}
+                                alt="Miembro del chat"
+                                width={34}
+                                height={34}
+                                className="h-[34px] w-[34px] rounded-full border-2 border-[#EEF1F6] object-cover"
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mt-5 space-y-3">
+                          {DASHBOARD_CHAT_PREVIEW.map((message) => (
+                            <div
+                              key={message.id}
+                              className={`max-w-[84%] rounded-[24px] px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.04)] ${
+                                message.outgoing ? "ml-auto bg-[#F0B6E8] text-[#1B2140]" : "bg-white text-[#1B2140]"
+                              }`}
+                            >
+                              <div
+                                className="text-[14px] leading-[1.5]"
+                                style={{
+                                  fontFamily: "var(--font-dashboarddemarca-body)",
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {message.text}
+                              </div>
+                              <div className="mt-2 text-right text-[12px] text-[#667085]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                {message.time}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-5 flex items-center gap-3">
+                          <div className="flex h-[54px] flex-1 items-center rounded-full bg-white px-5 text-[15px] text-[#98A0B3]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            Type your message...
+                          </div>
+                          <button
+                            type="button"
+                            className="flex h-[54px] w-[54px] items-center justify-center rounded-full bg-[#B8ADF7] text-white shadow-[0_8px_18px_rgba(184,173,247,0.38)]"
+                            onClick={() => router.push("/store/chat")}
+                            aria-label="Abrir chat"
+                          >
+                            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M22 2 11 13" />
+                              <path d="m22 2-7 20-4-9-9-4Z" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : activeKey === "editar-perfil" ? (
+              <div className="h-full">
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#F6F7F9]">
+                  <div className="px-8 pt-8">
+                    <div className="mx-auto flex max-w-[980px] items-start justify-between rounded-[28px] bg-white px-7 py-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-[0.24em] text-[#7A8298]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Configuración
+                        </div>
+                        <h2 className="mt-2 text-[22px] leading-none text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                          Información personal
+                        </h2>
+                        <p className="mt-3 max-w-[520px] text-[14px] leading-[1.55] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                          Aquí defines la foto y los datos que se reflejan en la parte superior del dashboard de Tawa.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 pl-6">
+                        {personalProfileSaveOk ? (
+                          <span className="text-[13px] text-[#2B7A3D]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            {personalProfileSaveOk}
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="h-[46px] rounded-full border border-[#D6DBE5] bg-white px-6 text-[15px] text-[#1A213D]"
+                          style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
+                          onClick={() => {
+                            if (profileEditable) {
+                              if (typeof window !== "undefined") {
+                                localStorage.setItem("tawa-personal-profile", JSON.stringify(personalProfile));
+                              }
+                              setPersonalProfileSaveOk("Perfil actualizado.");
+                              window.setTimeout(() => setPersonalProfileSaveOk(""), 2200);
+                            }
+                            setProfileEditable((prev) => !prev);
+                          }}
+                        >
+                          {profileEditable ? "Guardar cambios" : "Editar perfil"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-8">
+                    <div className="mx-auto max-w-[980px]">
+                      <div className="space-y-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowAvatarPicker(true)}
+                          className="grid w-full grid-cols-[52px_minmax(0,1fr)_88px] items-center gap-4 rounded-[24px] bg-white px-5 py-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]"
+                        >
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
                             {personalProfileIcon("photo")}
                           </div>
                           <div>
-                            <div className="text-[16px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Foto de perfil</div>
-                            <div className="mt-1 text-[14px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                            <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Foto de perfil</div>
+                            <div className="mt-1 text-[13px] text-[#6D748A]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                               Imagen principal que verás en el dashboard.
                             </div>
                           </div>
@@ -3853,24 +3988,25 @@ export default function DashboardDemarcaPage() {
                               className="h-[68px] w-[68px] rounded-full object-cover"
                             />
                           </div>
-                        </div>
+                        </button>
 
-                        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-5">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                        <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
                               {personalProfileIcon("name")}
                             </div>
                             <div>
-                              <div className="text-[16px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Nombre</div>
+                              <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Nombre</div>
                               {profileEditable ? (
                                 <input
                                   value={personalProfile.fullName}
                                   onChange={(e) => setPersonalProfile((prev) => ({ ...prev, fullName: e.target.value }))}
-                                  className="mt-2 h-[48px] w-full rounded-full border-none bg-[#F5F6F8] px-5 text-[15px] text-[#2B334B] outline-none"
+                                  className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
                                   style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
                                 />
                               ) : (
-                                <div className="mt-1 text-[15px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                <div className="mt-1 text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                                   {personalProfile.fullName}
                                 </div>
                               )}
@@ -3878,18 +4014,18 @@ export default function DashboardDemarcaPage() {
                           </div>
                         </div>
 
-                        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-5">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                        <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
                               {personalProfileIcon("gender")}
                             </div>
                             <div>
-                              <div className="text-[16px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Género</div>
+                              <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Género</div>
                               {profileEditable ? (
                                 <select
                                   value={personalProfile.gender}
                                   onChange={(e) => setPersonalProfile((prev) => ({ ...prev, gender: e.target.value }))}
-                                  className="mt-2 h-[48px] w-full appearance-none rounded-full border-none bg-[#F5F6F8] px-5 text-[15px] text-[#2B334B] outline-none"
+                                  className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
                                   style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
                                 >
                                   <option>Femenino</option>
@@ -3898,7 +4034,7 @@ export default function DashboardDemarcaPage() {
                                   <option>Prefiero no decirlo</option>
                                 </select>
                               ) : (
-                                <div className="mt-1 text-[15px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                <div className="mt-1 text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                                   {personalProfile.gender}
                                 </div>
                               )}
@@ -3906,14 +4042,14 @@ export default function DashboardDemarcaPage() {
                           </div>
                         </div>
 
-                        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-5">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                        <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
                               {personalProfileIcon("email")}
                             </div>
                             <div>
-                              <div className="text-[16px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Correo electrónico</div>
-                              <div className="mt-1 space-y-1 text-[15px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Correo electrónico</div>
+                              <div className="mt-1 space-y-2 text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                                 {personalProfile.emails.map((email, index) => (
                                   profileEditable ? (
                                     <input
@@ -3924,7 +4060,7 @@ export default function DashboardDemarcaPage() {
                                         nextEmails[index] = e.target.value;
                                         setPersonalProfile((prev) => ({ ...prev, emails: nextEmails }));
                                       }}
-                                      className="h-[46px] w-full rounded-full border-none bg-[#F5F6F8] px-5 text-[15px] text-[#2B334B] outline-none"
+                                      className="h-[44px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
                                     />
                                   ) : (
                                     <div key={`personal-email-${index}`}>{email}</div>
@@ -3935,14 +4071,14 @@ export default function DashboardDemarcaPage() {
                           </div>
                         </div>
 
-                        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-5">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                        <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
                               {personalProfileIcon("phone")}
                             </div>
                             <div>
-                              <div className="text-[16px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Teléfono</div>
-                              <div className="mt-1 space-y-1 text-[15px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                              <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Teléfono</div>
+                              <div className="mt-1 space-y-2 text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                                 {personalProfile.phones.map((phone, index) => (
                                   profileEditable ? (
                                     <input
@@ -3953,7 +4089,7 @@ export default function DashboardDemarcaPage() {
                                         nextPhones[index] = e.target.value;
                                         setPersonalProfile((prev) => ({ ...prev, phones: nextPhones }));
                                       }}
-                                      className="h-[46px] w-full rounded-full border-none bg-[#F5F6F8] px-5 text-[15px] text-[#2B334B] outline-none"
+                                      className="h-[44px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
                                     />
                                   ) : (
                                     <div key={`personal-phone-${index}`}>{phone}</div>
@@ -3964,22 +4100,22 @@ export default function DashboardDemarcaPage() {
                           </div>
                         </div>
 
-                        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-5">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                        <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
                               {personalProfileIcon("birth")}
                             </div>
                             <div>
-                              <div className="text-[16px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Fecha de nacimiento</div>
+                              <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Fecha de nacimiento</div>
                               {profileEditable ? (
                                 <input
                                   value={personalProfile.birthDate}
                                   onChange={(e) => setPersonalProfile((prev) => ({ ...prev, birthDate: e.target.value }))}
-                                  className="mt-2 h-[48px] w-full rounded-full border-none bg-[#F5F6F8] px-5 text-[15px] text-[#2B334B] outline-none"
+                                  className="mt-2 h-[46px] w-full rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
                                   style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
                                 />
                               ) : (
-                                <div className="mt-1 text-[15px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                <div className="mt-1 text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                                   {personalProfile.birthDate}
                                 </div>
                               )}
@@ -3987,18 +4123,18 @@ export default function DashboardDemarcaPage() {
                           </div>
                         </div>
 
-                        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-5">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
+                        <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                          <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F3F4F7] text-[#2A3146]">
                               {personalProfileIcon("locale")}
                             </div>
                             <div>
-                              <div className="text-[16px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Idioma</div>
+                              <div className="text-[15px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>Idioma</div>
                               {profileEditable ? (
                                 <select
                                   value={personalProfile.locale}
                                   onChange={(e) => setPersonalProfile((prev) => ({ ...prev, locale: e.target.value }))}
-                                  className="mt-2 h-[48px] w-full appearance-none rounded-full border-none bg-[#F5F6F8] px-5 text-[15px] text-[#2B334B] outline-none"
+                                  className="mt-2 h-[46px] w-full appearance-none rounded-2xl border-none bg-[#F5F6F8] px-4 text-[14px] text-[#2B334B] outline-none"
                                   style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}
                                 >
                                   <option>Español (Latinoamérica)</option>
@@ -4008,17 +4144,79 @@ export default function DashboardDemarcaPage() {
                                   <option>Português</option>
                                 </select>
                               ) : (
-                                <div className="mt-1 text-[15px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
+                                <div className="mt-1 text-[14px] text-[#4A5268]" style={{ fontFamily: "var(--font-dashboarddemarca-body)" }}>
                                   {personalProfile.locale}
                                 </div>
                               )}
                             </div>
                           </div>
                         </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
+                {showAvatarPicker ? (
+                  <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#1B2140]/28 p-6">
+                    <div className="w-full max-w-[520px] rounded-[30px] bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          className="flex h-10 w-10 items-center justify-center rounded-full text-[30px] leading-none text-[#4A5268] hover:bg-[#F3F4F7]"
+                          onClick={() => setShowAvatarPicker(false)}
+                        >
+                          ×
+                        </button>
+                        <div className="text-[18px] text-[#121633]" style={{ fontFamily: "var(--font-dashboarddemarca-heading)" }}>
+                          Cambia la foto de perfil
+                        </div>
+                        <div className="h-10 w-10" />
+                      </div>
+
+                      <div className="mt-6 flex justify-center">
+                        <div className="rounded-full border-[8px] border-white shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
+                          <Image
+                            src={personalProfile.avatarUrl}
+                            alt="Foto seleccionada"
+                            width={150}
+                            height={150}
+                            className="h-[150px] w-[150px] rounded-full object-cover"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-8 flex flex-wrap justify-center gap-4">
+                        {PERSONAL_AVATAR_OPTIONS.map((option) => {
+                          const selected = personalProfile.avatarUrl === option.src;
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() => {
+                                setPersonalProfile((prev) => ({ ...prev, avatarUrl: option.src }));
+                                setShowAvatarPicker(false);
+                              }}
+                              className={`rounded-full border-[6px] transition ${
+                                selected
+                                  ? "border-[#4449D7] shadow-[0_10px_24px_rgba(68,73,215,0.22)]"
+                                  : "border-white hover:border-[#D8DDE7] hover:shadow-[0_10px_20px_rgba(15,23,42,0.10)]"
+                              }`}
+                              aria-label={option.label}
+                            >
+                              <Image
+                                src={option.src}
+                                alt={option.label}
+                                width={76}
+                                height={76}
+                                className="h-[76px] w-[76px] rounded-full object-cover"
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : activeKey === "es-seg" || activeKey === "es-seg-info" || activeKey === "es-seg-distribution" || activeKey.startsWith("warehouse-") ? (
               <div className="h-full">
